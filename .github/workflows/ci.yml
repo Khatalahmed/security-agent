@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+defaults:
+  run:
+    working-directory: security-agent   # the package lives in a subdir of the repo root
+
 jobs:
   test:
     runs-on: ubuntu-latest
