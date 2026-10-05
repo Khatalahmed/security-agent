@@ -1,0 +1,37 @@
+{
+  "_doc": "Ground truth for the HARD/subtle corpus (evaluation/fixtures_hard). Each vulnerable fixture has a subtle, bypassable-looking-but-real bug; each safe fixture looks dangerous but is correctly defended ([] = any finding is a false positive).",
+  "fixtures": {
+    "vulnerable/ssrf_blocklist_bypass": {
+      "expected": ["ssrf"],
+      "note": "blocklist of literal hosts is bypassable (IP encodings, DNS rebinding, redirects)"
+    },
+    "vulnerable/sqli_helper_concat": {
+      "expected": ["sqli"],
+      "note": "unsafe concatenation is in _build_query, one call from the handler"
+    },
+    "vulnerable/idor_authn_not_authz": {
+      "expected": ["idor"],
+      "note": "authN check present but no ownership (authZ) check"
+    },
+    "vulnerable/ssti_helper_format": {
+      "expected": ["ssti"],
+      "note": "template source built via %-format in render_banner helper"
+    },
+    "safe/ssrf_allowlist_safe": {
+      "expected": [],
+      "note": "strict https + host allowlist, redirects disabled"
+    },
+    "safe/sqli_allowlist_sort_safe": {
+      "expected": [],
+      "note": "ORDER BY column from a fixed allowlist; data value parameterized"
+    },
+    "safe/idor_ownership_safe": {
+      "expected": [],
+      "note": "ownership (owner_id == current_user.id) enforced before access"
+    },
+    "safe/ssti_context_var_safe": {
+      "expected": [],
+      "note": "fixed template; user input passed as bound, autoescaped data"
+    }
+  }
+}

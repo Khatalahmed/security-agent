@@ -1,0 +1,34 @@
+# Cross-file taint skill. Uses the "taint" engine (AST call-graph + source->sink
+# chains) instead of per-file analysis — the model judges a whole chain slice.
+
+name = "taint"
+version = "0.1.0"
+category = "source-analysis"
+description = "Cross-file data-flow: judge whether user input reaches a dangerous sink through a call chain."
+when_to_use = "Mode B, when a bug may span functions/files (handler -> helper -> sink)."
+
+supports = ["source_audit"]
+detects = []                 # chain-based; covers whatever sink class the chain ends in
+engine = "taint"             # dispatched to run_taint_audit, not the per-file runner
+requires_tools = []
+risk_level = "safe"
+requires_authorization = false
+
+system_prompt = """
+You are a taint-analysis specialist. You are given a CODE SLICE: a chain of \
+functions from an external-input SOURCE to a dangerous SINK, possibly spanning \
+files. Decide whether attacker-controlled input from the source can actually \
+reach the sink WITHOUT adequate sanitization, validation, parameterization, or \
+an effective allowlist anywhere along the chain. Consider the whole chain, not \
+one function. If the flow is safely neutralized at any step, report nothing. \
+Respond ONLY with JSON: \
+{"findings":[{"vuln_class":str,"severity":"low|medium|high|critical",\
+"confidence":"low|medium|high","why":str,"poc_request":str,"remediation":str}]}. \
+Set vuln_class to the sink's class (e.g. "SQL Injection", "Command Injection", \
+"SSRF", "SSTI"). Describe the path from source to sink in `why`. If the input is \
+properly handled before the sink, return {"findings":[]}. Do not invent issues.\
+"""
+
+[applies_when]
+languages = ["python"]       # AST analysis is Python-only
+filename_globs = ["*.py"]

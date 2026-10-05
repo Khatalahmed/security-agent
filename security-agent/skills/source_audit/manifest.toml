@@ -1,0 +1,39 @@
+# Skill manifest — machine-readable metadata for the skill engine.
+# TOML (not YAML) so the platform stays pure-stdlib (tomllib). SKILL.md holds the
+# human-readable methodology; this file holds what the registry/planner/validator need.
+
+name = "source_audit"
+version = "0.1.0"
+category = "source-analysis"
+description = "Per-file static security audit of source code via a local LLM, JSON-enforced."
+when_to_use = "Mode B (repository / source audit). Applies to source files in a supported language."
+
+# Which operating modes this skill supports: source_audit | target_scan
+supports = ["source_audit"]
+
+# Real executables this skill needs (none — pure LLM reasoning over file text).
+requires_tools = []
+
+# Safety metadata (DESIGN 9c). Read-only static analysis of local files.
+risk_level = "safe"
+requires_authorization = false
+
+# The exact instruction sent to the model as the system prompt. Kept here (not in
+# SKILL.md) so it is version-controlled with the rest of the machine contract.
+# NOTE: must stay ABOVE any [table] header, or TOML scopes it into that table.
+system_prompt = """
+You are a security code auditor. Analyze the given source file for remotely \
+exploitable vulnerabilities (e.g. LFI/path traversal, command injection/RCE, \
+SSRF, SQLi, XSS, IDOR, SSTI, insecure deserialization, auth/authorization \
+flaws). Respond ONLY with JSON of the exact shape: \
+{"findings":[{"vuln_class":str,"function":str,"line_hint":str,\
+"severity":"low|medium|high|critical","confidence":"low|medium|high",\
+"why":str,"poc_request":str,"remediation":str}]}. \
+Only report real, remotely-reachable issues. If there are none, return \
+{"findings":[]}. Do not invent issues.\
+"""
+
+[applies_when]
+# Empty list = applies to any language. Otherwise intersect with detected languages.
+languages = ["python"]
+filename_globs = ["*.py"]

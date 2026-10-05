@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+data/
+logs/
+reports/
+.work/
+.venv/
+*.egg-info/
+build/
+dist/
+
+# generated artifacts
+evaluation/results/
+evaluation/*_run.log
+knowledge/embeddings.json

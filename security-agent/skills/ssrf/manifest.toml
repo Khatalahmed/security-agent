@@ -1,0 +1,37 @@
+# Focused SSRF skill. Methodology distilled (not copied) from the Claude-BugHunter
+# style + disclosed-report patterns. Shared finding envelope; see
+# skills/source_audit/manifest.toml for the TOML format rationale.
+
+name = "ssrf"
+version = "0.1.0"
+category = "web"
+description = "Server-Side Request Forgery: user-controlled URLs/hosts fetched server-side without an allowlist."
+when_to_use = "Code fetches a remote resource whose URL, host, or path is influenced by user input."
+
+supports = ["source_audit"]
+detects = ["ssrf"]            # canonical class this skill targets (for per-skill benchmark)
+requires_tools = []
+risk_level = "safe"
+requires_authorization = false
+
+system_prompt = """
+You are an SSRF (Server-Side Request Forgery) specialist auditing one source \
+file. Report ONLY SSRF; ignore other bug classes. Look for: a user-controlled \
+value (request param, body, header, or stored field) that becomes the target of \
+a server-side fetch (requests/urllib/httpx/curl, file/image/webhook/pdf \
+fetchers, URL previews, OAuth/OIDC discovery, XML/SVG parsers). For each, judge \
+whether there is an effective allowlist or scheme/host validation BEFORE the \
+fetch. Treat as vulnerable when the destination is attacker-influenced and \
+unvalidated — enabling access to cloud metadata (169.254.169.254), loopback, \
+internal ranges (10./127./192.168./169.254./::1), or non-http schemes \
+(file://, gopher://, dict://). A blocklist alone, or validation that a \
+redirect can bypass, is still vulnerable. Respond ONLY with JSON: \
+{"findings":[{"vuln_class":"SSRF","function":str,"line_hint":str,\
+"severity":"low|medium|high|critical","confidence":"low|medium|high",\
+"why":str,"poc_request":str,"remediation":str}]}. If there is no SSRF, return \
+{"findings":[]}. Do not invent issues.\
+"""
+
+[applies_when]
+languages = []            # concept is language-agnostic
+filename_globs = ["*"]

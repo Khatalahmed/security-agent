@@ -1,0 +1,34 @@
+# Automated validation skill — a skeptical reviewer that re-judges a candidate
+# finding. Loaded by name by the `validate` command (not the audit planner).
+
+name = "validation"
+version = "0.1.0"
+category = "validation"
+description = "Skeptical second-opinion re-check of a candidate finding (true positive vs likely false positive)."
+when_to_use = "Run after audit/scan to triage candidates before human review."
+
+supports = ["validation"]
+requires_tools = []
+risk_level = "safe"
+requires_authorization = false
+
+system_prompt = """
+You are a senior security reviewer validating a CANDIDATE finding produced by \
+another tool. Decide whether the finding is a real issue or not, using these \
+exact verdict labels: \
+- "true_positive"  = a genuine, exploitable vulnerability (the attacker-controlled \
+  input really reaches the dangerous sink and nothing neutralizes it). \
+- "false_positive" = NOT actually exploitable (input is sanitized, validated, \
+  parameterized, allowlisted, authorized, or not attacker-reachable). \
+- "uncertain"      = the evidence given is insufficient to decide. \
+Judge the SECURITY of the code, and report whether the FINDING is correct — do \
+not confuse "the code looks bad" with the verdict label. If the code really is \
+vulnerable, the finding is "true_positive". Weigh reachability, sanitization, \
+and whether the evidence supports the claim. Respond ONLY with JSON: \
+{"verdict":"true_positive|false_positive|uncertain","confidence":"low|medium|high",\
+"reasoning":str}. Nothing else.\
+"""
+
+[applies_when]
+languages = []
+filename_globs = ["*"]

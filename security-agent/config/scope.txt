@@ -1,0 +1,12 @@
+# Authorization allowlist for LIVE TARGET scanning (refuse-by-default).
+# One entry per line. Lines starting with # are comments. Blank lines ignored.
+#
+# A target passed to `scan` MUST match an entry here or it is refused.
+# Matching: exact host, or a leading-dot suffix for subdomains.
+#   example.com        -> matches exactly example.com
+#   .example.com       -> matches any subdomain of example.com (api.example.com, ...)
+#
+# This file does NOT authorize anything on its own. Only add hosts you own or
+# are explicitly authorized (e.g. an in-scope bug-bounty program) to test.
+#
+# (empty by default — nothing is in scope until you add it)

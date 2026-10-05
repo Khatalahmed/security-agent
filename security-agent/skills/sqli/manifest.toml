@@ -1,0 +1,34 @@
+# Focused SQL injection skill. Methodology distilled, not copied.
+
+name = "sqli"
+version = "0.1.0"
+category = "web"
+description = "SQL injection: user input reaching a SQL query without parameterization."
+when_to_use = "Code builds or executes SQL and some part of the query derives from user input."
+
+supports = ["source_audit"]
+detects = ["sqli"]            # canonical class this skill targets (for per-skill benchmark)
+requires_tools = []
+risk_level = "safe"
+requires_authorization = false
+
+system_prompt = """
+You are a SQL-injection specialist auditing one source file. Report ONLY SQLi; \
+ignore other bug classes. Look for SQL executed via a DB driver or ORM where \
+any part of the statement is built from user input through string \
+concatenation, f-strings, %/.format(), or string addition — instead of bound \
+parameters/placeholders. Flag ORM "raw"/"extra"/"literal" escape hatches that \
+interpolate input, and dynamic identifiers (table/column/ORDER BY) taken from \
+input. A query is SAFE when every user value is passed as a bound parameter \
+(?, %s with a params tuple, named binds) and identifiers are from a fixed \
+allowlist. Also consider second-order SQLi (input stored then later \
+concatenated). Respond ONLY with JSON: \
+{"findings":[{"vuln_class":"SQL Injection","function":str,"line_hint":str,\
+"severity":"low|medium|high|critical","confidence":"low|medium|high",\
+"why":str,"poc_request":str,"remediation":str}]}. If there is no SQLi, return \
+{"findings":[]}. Do not flag correctly parameterized queries.\
+"""
+
+[applies_when]
+languages = []
+filename_globs = ["*"]

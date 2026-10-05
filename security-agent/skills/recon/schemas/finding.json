@@ -1,0 +1,13 @@
+{
+  "description": "Finding shape for the recon (target_scan) skill. Severity includes 'info' for low-signal recon observations.",
+  "type": "object",
+  "required": ["vuln_class", "severity", "why"],
+  "properties": {
+    "vuln_class":  {"type": "string"},
+    "location":    {"type": "string"},
+    "severity":    {"type": "string", "enum": ["info", "low", "medium", "high", "critical"]},
+    "confidence":  {"type": "string", "enum": ["low", "medium", "high"]},
+    "why":         {"type": "string"},
+    "remediation": {"type": "string"}
+  }
+}

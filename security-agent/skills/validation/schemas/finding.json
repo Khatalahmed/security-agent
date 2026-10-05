@@ -1,0 +1,10 @@
+{
+  "description": "Validation verdict object. verdict drives the lifecycle transition (true_positive -> VALIDATED).",
+  "type": "object",
+  "required": ["verdict"],
+  "properties": {
+    "verdict":    {"type": "string", "enum": ["true_positive", "false_positive", "uncertain"]},
+    "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
+    "reasoning":  {"type": "string"}
+  }
+}

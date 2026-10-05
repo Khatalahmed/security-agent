@@ -1,0 +1,43 @@
+# security-agent configuration
+# All values have sensible defaults; override here.
+
+[model]
+provider = "ollama"            # ollama (local) | openai | openrouter | anthropic (hosted)
+name     = "qwen2.5-coder:7b"
+base_url = "http://127.0.0.1:11434/api/generate"
+num_ctx  = 8192                # context window; must fit the analyzed chunk + instructions
+temperature = 0.1
+timeout_seconds = 1800         # CPU inference is slow; be generous
+max_tokens = 2048              # hosted providers only
+
+# --- Hosted backends (stronger models) -------------------------------------
+# Switch provider/name below. Keys are read from ENV VARS, never stored here.
+# PRIVACY: a hosted backend sends the analyzed code/evidence to that API.
+#
+#   provider = "anthropic"   # export ANTHROPIC_API_KEY ; name = "claude-sonnet-5-5"
+#   provider = "openai"      # export OPENAI_API_KEY     ; name = "gpt-4o"
+#   provider = "openrouter"  # export OPENROUTER_API_KEY ; name = "<vendor/model>"
+# Optional overrides: api_key_env = "MY_KEY_VAR", base_url = "https://..."
+
+[safety]
+scope_file = "config/scope.txt"   # refuse-by-default allowlist for LIVE target scanning
+max_rps = 2                        # politeness cap for target mode (not yet wired to a scanner)
+
+[audit]
+# Source-code audit (repository) settings
+include_globs = ["*.py"]           # which files to analyze (MVP: Python, vulnhuntr's domain)
+skip_dirs = [".git", ".venv", "venv", "node_modules", "__pycache__", ".work", "tests"]
+max_file_kb = 48                   # files larger than this are skipped (would blow num_ctx)
+
+[skills]
+dir = "skills"                        # project-root directory of skill definitions
+# Which skills run by default. [] = every applicable skill (slow once the library
+# grows — each skill is a separate LLM pass per file). The two proven skills ship
+# as the default; focused skills (ssrf, sqli, idor, ssti, ...) are opt-in per run
+# with `--skills ssti,ssrf` or by editing this list.
+enabled = ["source_audit", "secrets"]
+
+[storage]
+db_path = "data/findings.db"
+reports_dir = "reports"
+audit_log = "logs/audit.log"

@@ -1,0 +1,30 @@
+# Mode A reconnaissance skill. Reasons over an attack-surface PROFILE (evidence
+# gathered by the probe tools) — it does not itself touch the network.
+
+name = "recon"
+version = "0.1.0"
+category = "reconnaissance"
+description = "Analyze an authorized target's attack-surface profile and prioritize observations."
+when_to_use = "Mode A (target scan): after the probe tools build a profile of an in-scope host."
+
+supports = ["target_scan"]
+requires_tools = ["http_probe", "dns_lookup"]
+risk_level = "low"
+requires_authorization = true
+
+system_prompt = """
+You are a web reconnaissance analyst reviewing an ALREADY-AUTHORIZED target's \
+attack-surface profile (DNS, live schemes, server/tech fingerprint, response \
+headers, discovered paths). Using ONLY the evidence given, report notable \
+security observations and areas worth investigating — e.g. exposed sensitive \
+files, missing hardening, version/tech disclosure, interesting endpoints, \
+authentication surface. Do NOT fabricate anything not supported by the profile, \
+and do NOT propose or perform active exploitation. Respond ONLY with JSON: \
+{"findings":[{"vuln_class":str,"location":str,\
+"severity":"info|low|medium|high|critical","confidence":"low|medium|high",\
+"why":str,"remediation":str}]}. If nothing notable, return {"findings":[]}.\
+"""
+
+[applies_when]
+languages = []
+filename_globs = ["*"]

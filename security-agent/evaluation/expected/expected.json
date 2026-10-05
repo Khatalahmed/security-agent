@@ -1,0 +1,45 @@
+{
+  "_doc": "Ground truth for each fixture. Keys are fixture ids (category/name). 'expected' lists the canonical vuln classes that SHOULD be found in that fixture; an empty list means the fixture is clean and ANY finding is a false positive. 'files' is informational.",
+  "fixtures": {
+    "vulnerable/path_traversal": {
+      "expected": ["path_traversal"],
+      "files": ["server.py"],
+      "note": "LFI via unsanitized os.path.join in read_doc"
+    },
+    "vulnerable/sql_injection": {
+      "expected": ["sqli"],
+      "files": ["db.py"],
+      "note": "string-formatted SQL in find_user"
+    },
+    "vulnerable/ssrf_fetch": {
+      "expected": ["ssrf"],
+      "files": ["app.py"],
+      "note": "user URL fetched server-side, no allowlist"
+    },
+    "vulnerable/ssti_render": {
+      "expected": ["ssti"],
+      "files": ["app.py"],
+      "note": "user input concatenated into render_template_string"
+    },
+    "vulnerable/idor_invoice": {
+      "expected": ["idor"],
+      "files": ["app.py"],
+      "note": "invoice fetched by user id with no ownership check"
+    },
+    "safe/safe_fileserver": {
+      "expected": [],
+      "files": ["server.py"],
+      "note": "basename + allowlist; no traversal possible"
+    },
+    "safe/safe_db": {
+      "expected": [],
+      "files": ["db.py"],
+      "note": "parameterized query"
+    },
+    "mixed/user_api": {
+      "expected": ["command_injection"],
+      "files": ["api.py"],
+      "note": "command injection in run_lookup; get_profile is safe and must not be flagged"
+    }
+  }
+}

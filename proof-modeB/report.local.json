@@ -1,0 +1,43 @@
+{
+  "proof_run": {
+    "date": "2026-10-05",
+    "model": "qwen2.5-coder:7b",
+    "backend": "ollama (direct, correct integration)",
+    "target": "proof-modeB/vuln_app/app.py",
+    "metrics": {
+      "detection": "3/3",
+      "false_positives": 0,
+      "json_valid": true,
+      "wall_seconds": 165.2,
+      "gen_tokens_per_sec": 3.13,
+      "input_tokens": 439,
+      "output_tokens": 332
+    }
+  },
+  "findings": [
+    {
+      "vuln_class": "Local File Inclusion",
+      "function": "download",
+      "line_hint": "name = request.args.get(\"name\", \"\")",
+      "severity": "high",
+      "why": "The `name` parameter is used to construct a file path without any sanitization, allowing attackers to traverse directories and potentially access sensitive files.",
+      "poc_request": "/download?name=../../etc/passwd"
+    },
+    {
+      "vuln_class": "Command Injection",
+      "function": "ping",
+      "line_hint": "subprocess.check_output(f\"ping -c 1 {host}\", shell=True)",
+      "severity": "high",
+      "why": "The `host` parameter is directly passed to a shell command without any validation or sanitization, allowing attackers to execute arbitrary commands on the server.",
+      "poc_request": "/ping?host=127.0.0.1;whoami"
+    },
+    {
+      "vuln_class": "Server-Side Request Forgery",
+      "function": "fetch",
+      "line_hint": "resp = requests.get(url, timeout=5)",
+      "severity": "high",
+      "why": "The `url` parameter is fetched server-side without any validation or allowlist, allowing attackers to perform SSRF attacks and potentially access internal resources.",
+      "poc_request": "/fetch?url=http://169.254.169.254/latest/meta-data/"
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+# Focused Server-Side Template Injection skill. Distilled, not copied.
+
+name = "ssti"
+version = "0.1.0"
+category = "web"
+description = "Server-Side Template Injection: user input rendered as template source."
+when_to_use = "User input flows into a template engine's source string rather than its data context."
+
+supports = ["source_audit"]
+detects = ["ssti"]            # canonical class this skill targets (for per-skill benchmark)
+requires_tools = []
+risk_level = "safe"
+requires_authorization = false
+
+system_prompt = """
+You are a Server-Side Template Injection (SSTI) specialist auditing one source \
+file. Report ONLY SSTI; ignore other classes. The vulnerability is user input \
+becoming part of the TEMPLATE SOURCE that an engine compiles/renders — not input \
+passed as template DATA. Flag patterns like Jinja2 \
+render_template_string(user_input) or Template(user_input).render(), f-strings/ \
+concatenation building the template text from input, and equivalents in other \
+engines (Mako, Twig, Freemarker, ERB, Handlebars, Velocity). Passing input as a \
+context variable to a fixed template (render_template("x.html", name=user)) is \
+SAFE. SSTI commonly escalates to RCE, so default severity is high/critical when \
+confirmed. Respond ONLY with JSON: \
+{"findings":[{"vuln_class":"SSTI","function":str,"line_hint":str,\
+"severity":"low|medium|high|critical","confidence":"low|medium|high",\
+"why":str,"poc_request":str,"remediation":str}]}. If input is only passed as \
+template data, return {"findings":[]}. Do not invent issues.\
+"""
+
+[applies_when]
+languages = []
+filename_globs = ["*"]

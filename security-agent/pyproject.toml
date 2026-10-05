@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "security-agent"
+version = "0.1.0"
+description = "Local, skill-driven AI security assessment platform (authorized testing only)."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []   # zero runtime dependencies — stdlib only (tomllib, sqlite3, urllib, ast)
+keywords = ["security", "sast", "recon", "llm", "ollama", "pentest", "authorized-testing"]
+classifiers = [
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Security",
+    "Environment :: Console",
+]
+
+[project.scripts]
+security-agent = "security_agent.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["security_agent*"]
+
+# Skill definitions (skills/) and the knowledge corpus (knowledge/) live at the
+# project root as data dirs resolved relative to it, so install editable:
+#     pip install -e .
+# then run `security-agent ...` from anywhere, or `python -m security_agent ...`.

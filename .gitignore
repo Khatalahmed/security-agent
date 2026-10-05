@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# Virtualenvs (machine-specific, large)
+.venv/
+.venv-proof/
+
+# Tool runtime / generated state
+.vulnhuntr_checkpoint/
+**/data/
+**/logs/
+**/reports/
+**/.work/
+evaluation/results/
+evaluation/*_run.log
+knowledge/embeddings.json
+
+# Phase-0 proof run artifacts (keep the scripts + fixture, not the logs)
+proof-modeB/*.log
