@@ -581,6 +581,22 @@ Ran down caveat #1. The stored verdict showed it was **not** a slicing/grounding
 
 **Measured (taint on hard3, before → after):** detection **3/3 → 3/3** (no recall loss), FP on safe twins **1/3 → 0/3**; the sqli safe twin cleared and was **stable across 3 repeats** (0 findings each) while the sqli vuln still detected. Honest limit: small sample (6 fixtures, one 7B model, temp 0.1) — a real precision/recall read awaits the expanded corpus (Phase 17) and a stronger-model comparison. The prompt change is a cheap, general precision lever; the human gate remains the backstop.
 
+## 10o. Phase 17 — hard4 (20 diverse fixtures): broad vs taint at scale (measured 2026-10-06)
+`evaluation/fixtures_hard4/` — 10 vulnerable + 10 safe-twin cross-file fixtures over new axes (sanitizer-in-the-middle `shlex.quote`/`basename`; 4-file chain depth; `int()` coercion; conditional-branch guard gap; loop taint; cross-file second-order; bypassable substring allowlist; decode-after-check; ssti bound-context). Head-to-head on qwen2.5-coder:7b (local):
+
+| Axis | Broad `source_audit` | Taint |
+|---|---|---|
+| Detection (10 vulnerable) | **10/10** | **9/10** (misses only `sqli_second_order_xfile` — the designed no-chain second-order blind spot) |
+| FP on 10 safe twins | **8/10** | **5/10** |
+| Safe twins cleared | int_coerce, ssti_context (2) | + deser_json (no chain), ssrf_exact, cmdi_loop_validated (5) |
+
+**Findings (honest):**
+1. **Taint's precision edge holds and widens at scale** — 5/10 safe twins cleared vs broad's 2/10 — for two distinct reasons: *deterministic* (`json.loads` yields no chain at all) and *model judgment over the full-chain slice* (exact allowlist, regex+argv validator credited; the §Phase 16 PoC-vs-guard self-check helping).
+2. **Both engines FP heavily on subtler guards.** Neither 7B credits **`shlex.quote`, `os.path.basename`, decode-upstream ordering, unconditional branch guard, or a bound second-order param** even with the whole chain in view. This is the **local-7B ceiling**, now measured — the strongest motivation for a stronger backend (kept local per the user: a 14B-class Ollama model, hardware permitting — §9 pegs this box at ~7–8B comfortably, 14B slow).
+3. **Engines are complementary, so "run both" is NOT a free precision win.** Broad caught the second-order taint missed; taint cleared safe twins broad flagged — but taint's 5 FPs are a **subset** of broad's 8, so a naive union (flag if either fires) is detection 10/10 **but FP still 8/10**. Capturing taint's precision requires making it primary or trusting its "clean" over broad's "flag" — a real merge-policy decision, not additive layering.
+
+**Verified:** deterministic integrity + chain-proposal guarantees in `tests/test_spine.py::test_hard4_corpus`; suite **203/203**; run logged (not committed) in `evaluation/hard4_h2h.log`. Decision deferred to Phase 18: test a stronger *local* model on hard4 before investing in more corpus or merge-policy work.
+
 ## 9c. Target architecture v2 (layered) — adopt *after* the Phase 3 experiment
 
 The v1 "~20 components" list is correct but flat. For a *standard* platform, organize it as **8 layers**. This is the version to build toward once the feasibility experiment passes.
