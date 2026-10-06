@@ -537,6 +537,13 @@ Packaging + onboarding + CI, without adding runtime dependencies.
 
 Not done (deliberately, would add scope/deps): Docker image, web UI, observability stack — out of scope for a zero-dependency local tool.
 
+## 10l. Phase 14 — incremental (diff) audit (built 2026-10-06)
+Audit only what changed, so the tool is practical as a PR/CI gate (fast, cheap on CPU, pairs with SARIF export). Stdlib git via subprocess; no new deps.
+- `security_agent/vcs.py` — `changed_files(repo, ref)`: files changed vs `<ref>` (or uncommitted vs HEAD when no ref), **including untracked** non-ignored files; `--relative` so paths match the repo root; clean error when `--repo` is not a git work tree.
+- `discover_files(..., restrict=set)` + `run_source_audit(..., restrict_files=…)` limit analysis to those repo-relative paths.
+- CLI `audit --diff [REF]` (`--diff` alone = uncommitted changes; `--diff main` = vs a ref). Early-exits "nothing to do" with no model call when the changed set is empty; applies to the per-file/skill runners (the whole-repo taint engine is unaffected by design).
+- **Verified:** unit tests for `restrict` + `changed_files` (modified/untracked/clean/non-git); CLI smoke test on a temp git repo — clean tree → 0 changed (no model call), untracked file → detected. Tests **178/178** (includes improvements landed in parallel: case-insensitive enum normalization, hosted base_url hardening, SARIF rule-level security-severity, planner skip-dir fix).
+
 ## 9c. Target architecture v2 (layered) — adopt *after* the Phase 3 experiment
 
 The v1 "~20 components" list is correct but flat. For a *standard* platform, organize it as **8 layers**. This is the version to build toward once the feasibility experiment passes.

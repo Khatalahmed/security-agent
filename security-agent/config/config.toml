@@ -17,11 +17,11 @@ max_tokens = 2048              # hosted providers only
 #   provider = "anthropic"   # export ANTHROPIC_API_KEY ; name = "claude-sonnet-5-5"
 #   provider = "openai"      # export OPENAI_API_KEY     ; name = "gpt-4o"
 #   provider = "openrouter"  # export OPENROUTER_API_KEY ; name = "<vendor/model>"
-# Optional overrides: api_key_env = "MY_KEY_VAR", base_url = "https://..."
+# Optional overrides: api_key_env = "MY_KEY_VAR"; base_url = "https://..." (openai/openrouter only)
 
 [safety]
 scope_file = "config/scope.txt"   # refuse-by-default allowlist for LIVE target scanning
-max_rps = 2                        # politeness cap for target mode (not yet wired to a scanner)
+max_rps = 2                        # politeness cap (requests/sec) for target-mode probing
 
 [audit]
 # Source-code audit (repository) settings

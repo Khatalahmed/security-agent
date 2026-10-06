@@ -10,6 +10,7 @@ caller authorized. No active exploitation.
 """
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
@@ -25,6 +26,12 @@ WELL_KNOWN = [
     "/.git/config", "/.env",
 ]
 _SENSITIVE = {"/.git/config", "/.env"}
+# What the real file looks like. Catch-all/SPA servers answer 200 with an HTML
+# page for any path, so a bare 200 is not evidence of exposure.
+_SENSITIVE_SIGNATURE = {
+    "/.git/config": re.compile(r"^\s*\[core\]", re.MULTILINE),
+    "/.env": re.compile(r"^\s*[A-Za-z_][A-Za-z0-9_]*\s*=", re.MULTILINE),
+}
 
 _SEV_LABEL = {
     "missing-security-header": ("Missing Security Header", "low"),
@@ -109,6 +116,10 @@ def profile_target(target: str, *, host: str | None = None, max_rps: float = 2.0
         r = probe(surface.primary_url + path, timeout=timeout)
         if r.ok and r.status == 200:
             sensitive = path in _SENSITIVE
+            if sensitive and (r.body_snippet.lstrip().startswith("<")
+                              or not _SENSITIVE_SIGNATURE[path].search(r.body_snippet)):
+                on_progress(f"  {path} -> 200 but content doesn't match (catch-all page); ignored")
+                continue
             surface.discovered_paths.append({"path": path, "status": 200, "sensitive": sensitive})
             on_progress(f"  found {path} (200){' [SENSITIVE]' if sensitive else ''}")
             # Passive endpoint discovery: parse what the server advertises.

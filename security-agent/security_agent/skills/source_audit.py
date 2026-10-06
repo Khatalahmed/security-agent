@@ -19,7 +19,7 @@ from typing import Callable, TYPE_CHECKING
 
 from security_agent.ai.base import AIProvider
 from security_agent.findings.models import Finding, State
-from security_agent.skillengine.validator import validate_item
+from security_agent.skillengine.validator import normalize_enums, validate_item
 
 if TYPE_CHECKING:
     from security_agent.skillengine.base import Skill
@@ -40,17 +40,26 @@ SYSTEM_PROMPT = (
 
 
 def discover_files(repo: Path, include_globs: list[str], skip_dirs: list[str],
-                   max_file_kb: int) -> tuple[list[Path], list[tuple[Path, str]]]:
-    """Return (files_to_analyze, skipped[(path, reason)])."""
+                   max_file_kb: int, restrict: set[str] | None = None,
+                   ) -> tuple[list[Path], list[tuple[Path, str]]]:
+    """Return (files_to_analyze, skipped[(path, reason)]).
+
+    If `restrict` is given (a set of repo-relative paths, forward-slash), only
+    files in that set are considered — used for incremental/diff audits.
+    """
     files: list[Path] = []
     skipped: list[tuple[Path, str]] = []
     skip = set(skip_dirs)
     for p in repo.rglob("*"):
         if not p.is_file():
             continue
-        if any(part in skip for part in p.parts):
+        # Match skip_dirs against the path *inside* the repo only — the repo itself
+        # may live under a skipped name (git URLs are cloned into .work/).
+        if any(part in skip for part in p.relative_to(repo).parts):
             continue
         if not any(fnmatch.fnmatch(p.name, g) for g in include_globs):
+            continue
+        if restrict is not None and p.relative_to(repo).as_posix() not in restrict:
             continue
         if p.stat().st_size > max_file_kb * 1024:
             skipped.append((p, f"larger than {max_file_kb} KB (would exceed num_ctx)"))
@@ -80,6 +89,7 @@ def run_source_audit(
     on_progress: Callable[[str], None] = lambda m: None,
     skill: "Skill | None" = None,
     knowledge: list[str] | None = None,
+    restrict_files: set[str] | None = None,
 ) -> tuple[list[Finding], dict]:
     """Analyze a repository. Returns (findings, stats).
 
@@ -87,7 +97,8 @@ def run_source_audit(
     audit and each finding is validated against that schema. When omitted, the
     built-in SYSTEM_PROMPT is used with no schema validation (legacy/test path).
     `knowledge`, if given, is a list of distilled reference patterns (RAG) that
-    are prepended to each file prompt as reference context.
+    are prepended to each file prompt as reference context. `restrict_files`, if
+    given, limits analysis to those repo-relative paths (incremental/diff audit).
     """
     system_prompt = skill.system_prompt if skill else SYSTEM_PROMPT
     schema = skill.finding_schema if skill else {}
@@ -98,7 +109,8 @@ def run_source_audit(
                     "judge the code on its own merits, do not invent issues):\n"
                     + "\n".join(f"- {k}" for k in knowledge) + "\n\n")
 
-    files, skipped = discover_files(repo, include_globs, skip_dirs, max_file_kb)
+    files, skipped = discover_files(repo, include_globs, skip_dirs, max_file_kb,
+                                    restrict=restrict_files)
     on_progress(f"{len(files)} file(s) to analyze, {len(skipped)} skipped")
 
     findings: list[Finding] = []
@@ -115,7 +127,12 @@ def run_source_audit(
         on_progress(f"analyzing {rel} ...")
         code = fp.read_text(encoding="utf-8", errors="replace")
         prompt = kb_block + f"File: {rel}\n\n```\n{code}\n```"
-        result = provider.generate(system_prompt, prompt, json=True)
+        try:
+            result = provider.generate(system_prompt, prompt, json=True)
+        except Exception as e:      # one failed call must not discard the whole run
+            stats["errors"] = stats.get("errors", 0) + 1
+            on_progress(f"  ! {rel}: model call failed: {e}")
+            continue
         stats["total_seconds"] += result.seconds
         stats["files_analyzed"] += 1
 
@@ -134,6 +151,7 @@ def run_source_audit(
                 continue
 
             # Validate against the skill's declared finding schema (if any).
+            item = normalize_enums(item, schema)
             schema_errors = validate_item(item, schema) if schema else []
             if schema_errors:
                 stats["schema_invalid"] = stats.get("schema_invalid", 0) + 1

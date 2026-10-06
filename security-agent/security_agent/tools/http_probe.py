@@ -42,13 +42,22 @@ class ProbeResult:
     error: str = ""
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Never follow redirects: the target of a 3xx was not scope-checked. The 3xx
+    surfaces as an HTTPError response (status + Location header) instead."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def probe(url: str, *, timeout: float = 8.0, max_bytes: int = 65536) -> ProbeResult:
     """Fetch one URL. Never raises for network/HTTP errors — returns ProbeResult."""
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT}, method="GET")
-    ctx = ssl.create_default_context()
+    opener = urllib.request.build_opener(
+        _NoRedirect, urllib.request.HTTPSHandler(context=ssl.create_default_context()))
     t0 = time.time()
     try:
-        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
+        with opener.open(req, timeout=timeout) as resp:
             raw = resp.read(max_bytes)
             headers = {k.lower(): v for k, v in resp.headers.items()}
             body = raw.decode("utf-8", errors="replace")

@@ -47,5 +47,22 @@ def validate_item(item, schema: dict) -> list[str]:
     return errors
 
 
+def normalize_enums(item, schema: dict):
+    """Return a copy of `item` with string enum fields snapped to the schema's
+    spelling when they match case-insensitively ("High" -> "high"). Local models
+    capitalize freely; without this a real finding is dropped as schema-invalid."""
+    if not isinstance(item, dict) or not schema:
+        return item
+    out = dict(item)
+    for key, spec in schema.get("properties", {}).items():
+        enum, val = spec.get("enum"), out.get(key)
+        if enum and isinstance(val, str):
+            match = next((e for e in enum if isinstance(e, str)
+                          and e.lower() == val.strip().lower()), None)
+            if match is not None:
+                out[key] = match
+    return out
+
+
 def is_valid(item, schema: dict) -> bool:
     return not validate_item(item, schema)

@@ -85,8 +85,15 @@ class FindingStore:
         self.conn.commit()
 
     def next_index(self, scan_id: str) -> int:
-        cur = self.conn.execute("SELECT COUNT(*) AS n FROM findings WHERE scan_id=?", (scan_id,))
-        return int(cur.fetchone()["n"]) + 1
+        """One past the highest existing index. Not COUNT+1: dedup leaves gaps in
+        the numbering, and a COUNT-based id would overwrite an existing finding
+        when a scan id is reused (INSERT OR REPLACE)."""
+        highest = 0
+        for (fid,) in self.conn.execute("SELECT id FROM findings WHERE scan_id=?", (scan_id,)):
+            tail = str(fid).rsplit("-", 1)[-1]
+            if tail.isdigit():
+                highest = max(highest, int(tail))
+        return highest + 1
 
     def get(self, finding_id: str) -> sqlite3.Row | None:
         cur = self.conn.execute("SELECT * FROM findings WHERE id=?", (finding_id,))

@@ -42,7 +42,11 @@ def make_provider(model_cfg: dict) -> AIProvider:
             temperature=temperature, timeout=timeout,
         )
     if provider in ("openai", "openrouter"):
-        base_url = model_cfg.get("base_url") or _DEFAULT_BASE[provider]
+        # The shipped config's base_url is Ollama's endpoint; a user who only flips
+        # `provider` must not have their API calls sent to it.
+        base_url = model_cfg.get("base_url") or ""
+        if not base_url or base_url.rstrip("/").endswith("/api/generate"):
+            base_url = _DEFAULT_BASE[provider]
         key_env = model_cfg.get("api_key_env") or _DEFAULT_KEY_ENV[provider]
         return OpenAICompatProvider(
             model=name, base_url=base_url, api_key_env=key_env, name=provider,

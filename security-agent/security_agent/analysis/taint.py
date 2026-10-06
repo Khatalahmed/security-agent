@@ -18,7 +18,7 @@ from typing import Callable
 from security_agent.ai.base import AIProvider
 from security_agent.analysis.callgraph import assemble_slice, build_graph, find_chains
 from security_agent.findings.models import Finding, State
-from security_agent.skillengine.validator import validate_item
+from security_agent.skillengine.validator import normalize_enums, validate_item
 
 
 def _parse(raw: str) -> tuple[list[dict], bool]:
@@ -55,7 +55,12 @@ def run_taint_audit(
         sig = " -> ".join(f"{f.file}::{f.name}" for f in chain.funcs)
         on_progress(f"chain [{chain.sink.vuln_class}] {sig}")
         slice_text = assemble_slice(chain)
-        result = provider.generate(skill.system_prompt, slice_text, json=True)
+        try:
+            result = provider.generate(skill.system_prompt, slice_text, json=True)
+        except Exception as e:      # one failed call must not discard the whole run
+            stats["errors"] = stats.get("errors", 0) + 1
+            on_progress(f"  ! model call failed: {e}")
+            continue
         stats["total_seconds"] += result.seconds
         items, ok = _parse(result.text)
         stats["json_ok" if ok else "json_bad"] += 1
@@ -64,6 +69,7 @@ def run_taint_audit(
         for item in items:
             if not isinstance(item, dict):
                 continue
+            item = normalize_enums(item, skill.finding_schema)
             if validate_item(item, skill.finding_schema):
                 stats["schema_invalid"] += 1
                 continue

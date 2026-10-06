@@ -10,7 +10,7 @@ import json
 
 from security_agent.ai.base import AIProvider
 from security_agent.findings.models import Finding, State
-from security_agent.skillengine.validator import validate_item
+from security_agent.skillengine.validator import normalize_enums, validate_item
 
 
 def _parse(raw: str) -> tuple[list[dict], bool]:
@@ -48,6 +48,7 @@ def run_target_analysis(profile_summary: str, host: str, scan_id: str,
     for item in items:
         if not isinstance(item, dict):
             continue
+        item = normalize_enums(item, skill.finding_schema)
         if validate_item(item, skill.finding_schema):
             stats["schema_invalid"] += 1
             continue

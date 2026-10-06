@@ -11,6 +11,7 @@ Commands:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -40,6 +41,9 @@ from security_agent.rag import (
 from security_agent.reporting import render_markdown, RENDERERS
 
 
+_DIFF_WORKING = "\x00working"   # sentinel: `--diff` with no ref => uncommitted changes
+
+
 def _provider_notice(cfg) -> None:
     """Warn when a hosted (non-local) backend will receive the analyzed data."""
     if not provider_is_local(cfg.model):
@@ -52,12 +56,12 @@ def _merge_stats(stats_list: list[dict]) -> dict:
     """Combine per-skill stats dicts into one summary for logging/printing."""
     merged = {
         "files_analyzed": 0, "files_skipped": 0, "json_ok": 0, "json_bad": 0,
-        "total_seconds": 0.0, "malformed_items": 0, "schema_invalid": 0,
+        "total_seconds": 0.0, "malformed_items": 0, "schema_invalid": 0, "errors": 0,
         "chains": 0, "chains_analyzed": 0, "skills": [],
     }
     for st in stats_list:
         for k in ("files_analyzed", "files_skipped", "json_ok", "json_bad",
-                  "malformed_items", "schema_invalid"):
+                  "malformed_items", "schema_invalid", "errors"):
             merged[k] += st.get(k, 0)
         merged["chains"] += st.get("chains", 0)
         merged["chains_analyzed"] += st.get("analyzed", 0)
@@ -84,13 +88,17 @@ def _clone_if_url(repo_arg: str, cfg) -> tuple[Path, bool]:
     if not looks_url:
         return Path(repo_arg).resolve(), False
     name = repo_arg.rstrip("/").split("/")[-1].removesuffix(".git") or "repo"
-    dest = cfg.path(".work") / name
+    # Key the clone dir by the full URL: github.com/a/app and github.com/b/app
+    # must not reuse each other's checkout.
+    url_tag = hashlib.sha1(repo_arg.encode()).hexdigest()[:8]
+    dest = cfg.path(".work") / f"{name}-{url_tag}"
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
         print(f"[*] reusing existing clone at {dest}")
         return dest, True
     print(f"[*] cloning {repo_arg} -> {dest}")
-    subprocess.run(["git", "clone", "--depth", "1", repo_arg, str(dest)], check=True)
+    # "--" so a repo argument can never be parsed as a git option.
+    subprocess.run(["git", "clone", "--depth", "1", "--", repo_arg, str(dest)], check=True)
     return dest, True
 
 
@@ -102,6 +110,23 @@ def cmd_audit(args) -> int:
     if not repo.is_dir():
         print(f"error: repo path not found: {repo}", file=sys.stderr)
         return 2
+
+    # Incremental/diff audit: restrict to files changed vs a git ref.
+    restrict_files = None
+    if getattr(args, "diff", None) is not None:
+        from security_agent.vcs import changed_files
+        ref = None if args.diff == _DIFF_WORKING else args.diff
+        restrict_files, err = changed_files(repo, ref)
+        if err:
+            print(f"error: --diff: {err}", file=sys.stderr)
+            store.close()
+            return 2
+        print(f"[*] diff mode: {len(restrict_files)} changed file(s) vs "
+              f"{ref or 'HEAD (working tree)'}")
+        if not restrict_files:
+            print("[*] no changed files to audit; nothing to do.")
+            store.close()
+            return 0
 
     scan_id = args.scan_id or _new_scan_id()
     _provider_notice(cfg)
@@ -129,6 +154,11 @@ def cmd_audit(args) -> int:
         unknown = sorted(set(enabled) - {s.name for s in applicable})
         if unknown:
             print(f"[!] requested skill(s) not applicable/known here: {', '.join(unknown)}", file=sys.stderr)
+    if cli_skills and not selected:
+        # Don't silently fall back to the broad built-in audit on a typo.
+        print("error: none of the --skills requested can run on this repo", file=sys.stderr)
+        store.close()
+        return 2
 
     store.create_scan(scan_id, "audit", str(repo), cfg.model["name"], cfg.data)
     log.record("audit_started", scan_id=scan_id, repo=str(repo), cloned=cloned,
@@ -185,6 +215,7 @@ def cmd_audit(args) -> int:
                 start_index=store.next_index(scan_id) + len(findings),
                 on_progress=lambda m: print(f"    {m}"),
                 skill=skill, knowledge=_knowledge_for(skill),
+                restrict_files=restrict_files,
             )
         findings.extend(f_s)
         stats_all.append(st)
@@ -217,13 +248,16 @@ def cmd_audit(args) -> int:
           f"JSON ok {stats['json_ok']}/{denom}, {stats['total_seconds']}s total")
     if stats["files_skipped"]:
         print(f"    {stats['files_skipped']} file(s) skipped (too large for num_ctx)")
+    if stats["errors"]:
+        print(f"[!] {stats['errors']} model call(s) failed (see messages above)", file=sys.stderr)
 
     out = Path(args.out) if args.out else cfg.path(cfg.storage["reports_dir"]) / f"{scan_id}.md"
     _write_report(store, scan_id, out)
     print(f"[*] report: {out}")
     print(f"[*] review:  python -m security_agent findings --scan {scan_id}")
     store.close()
-    return 0
+    # Every model call failed (e.g. Ollama not running): don't report success.
+    return 1 if stats["errors"] and not (stats["json_ok"] + stats["json_bad"]) else 0
 
 
 def cmd_scan(args) -> int:
@@ -524,7 +558,8 @@ def cmd_validate(args) -> int:
     # Only re-judge MODEL-proposed findings. Deterministic findings (e.g. recon
     # probe facts like "GET /.env -> 200") are not guesses — an LLM skeptic over
     # them adds noise, not signal (observed: it wrongly rejected a real exposure).
-    candidates = [r for r in all_candidates if not str(r["source"]).endswith(":probe")]
+    candidates = [r for r in all_candidates
+                  if not str(r["source"]).endswith((":probe", ":dns"))]
     skipped = len(all_candidates) - len(candidates)
     if not candidates:
         print(f"[*] no model-proposed CANDIDATE findings to validate in scan {args.scan}"
@@ -543,7 +578,11 @@ def cmd_validate(args) -> int:
         except Exception:
             finding["evidence"] = {}
         ctx = _validation_context(finding["evidence"], repo_root)
-        verdict, seconds = run_validation(finding, provider, skill, code_context=ctx)
+        try:
+            verdict, seconds = run_validation(finding, provider, skill, code_context=ctx)
+        except Exception as e:      # keep verdicts already recorded; this one stays CANDIDATE
+            print(f"    {row['id']}: model call failed ({e}); stays CANDIDATE", file=sys.stderr)
+            continue
         counts[verdict["verdict"]] = counts.get(verdict["verdict"], 0) + 1
         store.annotate(row["id"], {"validation": {**verdict, "seconds": round(seconds, 1),
                                                   "grounded": bool(ctx)}})
@@ -611,6 +650,9 @@ def build_parser() -> argparse.ArgumentParser:
                                     "(overrides config [skills].enabled; omit to use config)")
     a.add_argument("--rag", action="store_true",
                    help="ground skill prompts with retrieved disclosed-vuln patterns")
+    a.add_argument("--diff", nargs="?", const=_DIFF_WORKING, metavar="REF",
+                   help="audit only files changed vs REF (default: uncommitted changes); "
+                        "requires --repo to be a git work tree")
     a.set_defaults(func=cmd_audit)
 
     s = sub.add_parser("scan", help="live target assessment (scope-guarded)")

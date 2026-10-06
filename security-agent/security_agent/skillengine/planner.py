@@ -29,7 +29,7 @@ def detect_languages(repo: Path, skip_dirs: set[str] | None = None) -> set[str]:
     for p in repo.rglob("*"):
         if not p.is_file():
             continue
-        if any(part in skip for part in p.parts):
+        if any(part in skip for part in p.relative_to(repo).parts):
             continue
         lang = _EXT_LANG.get(p.suffix.lower())
         if lang:

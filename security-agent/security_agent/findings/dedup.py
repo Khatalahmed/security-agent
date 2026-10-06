@@ -16,6 +16,7 @@ vuln-class vocabulary.
 """
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 
 from security_agent.findings.models import Finding
@@ -43,10 +44,13 @@ _SEVERITY_ORDER = {"unknown": 0, "info": 0, "low": 1, "medium": 2, "high": 3, "c
 
 
 def canonical_class(raw_class: str) -> str:
-    """Map a free-form vuln_class to a canonical token, or 'other:<text>'."""
+    """Map a free-form vuln_class to a canonical token, or 'other:<text>'.
+
+    Needles must start at a word boundary, so short ones like "rce" don't fire
+    inside "source" / "force" / "resource"."""
     s = " ".join(str(raw_class).lower().replace("_", " ").replace("-", " ").split())
     for canon, needles in CANON.items():
-        if any(n in s for n in needles):
+        if any(re.search(r"\b" + re.escape(n), s) for n in needles):
             return canon
     return f"other:{s}" if s else "other:unknown"
 

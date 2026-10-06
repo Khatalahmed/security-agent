@@ -646,6 +646,177 @@ def test_human_gate():
         store.close()
 
 
+class FlakyStubProvider(AIProvider):
+    """First call raises (e.g. Ollama dropped), later calls succeed; emits a
+    capitalized severity the way local models often do."""
+    name = "stub-flaky"
+
+    def __init__(self):
+        self.calls = 0
+
+    def generate(self, system, prompt, *, json=True):
+        self.calls += 1
+        if self.calls == 1:
+            raise ConnectionError("simulated model outage")
+        return AIResult(text='{"findings":[{"vuln_class":"SQL Injection","function":"q",'
+                             '"severity":"High","confidence":"Medium","why":"concat"}]}',
+                        input_tokens=1, output_tokens=1, seconds=0.0)
+
+
+def test_review_regressions():
+    print("[review regressions]")
+    import http.server
+    import socketserver
+    import threading
+    from security_agent.skills.source_audit import discover_files
+    from security_agent.analysis.callgraph import build_graph
+    from security_agent.skillengine.validator import normalize_enums
+    from security_agent.ai import make_provider
+    from security_agent.reporting.sarif import render_sarif
+    from security_agent.tools import probe
+    from security_agent.recon import profiler
+    from security_agent.tools.http_probe import ProbeResult
+
+    # skip_dirs must match inside the repo, not the repo's own location
+    # (git URLs are cloned into .work/, which is itself a skip dir).
+    with tempfile.TemporaryDirectory() as d:
+        repo = Path(d) / ".work" / "clone"
+        (repo / "tests").mkdir(parents=True)
+        (repo / "app.py").write_text("import os\ndef f(request):\n    os.system(request.args['c'])\n")
+        (repo / "tests" / "t.py").write_text("x = 1\n")
+        skip = [".work", "tests"]
+        files, _ = discover_files(repo, ["*.py"], skip, 48)
+        check("repo under .work still audited", [p.name for p in files] == ["app.py"])
+        check("languages detected under .work", detect_languages(repo, set(skip)) == {"python"})
+        check("callgraph built under .work", len(build_graph(repo, ["*.py"], skip).all_funcs) == 1)
+
+        # a failed model call skips one file; a capitalized severity is kept
+        (repo / "b.py").write_text("y = 2\n")
+        found, stats = run_source_audit(repo=repo, scan_id="r", provider=FlakyStubProvider(),
+                                        include_globs=["*.py"], skip_dirs=skip, max_file_kb=48,
+                                        skill=SkillRegistry.discover(SKILLS_DIR).get("source_audit"))
+        check("model error counted, run continues", stats.get("errors") == 1 and len(found) == 1)
+        check("'High' severity accepted + normalized", found and found[0].severity == "high")
+
+    check("'rce' needle not inside 'source'",
+          canonical_class("Information disclosure via source maps") != "command_injection")
+    check("'force' is not command injection", canonical_class("Brute force login") != "command_injection")
+    check("RCE still canonicalizes", canonical_class("RCE via eval") == "command_injection")
+    check("normalize_enums leaves unknown values",
+          normalize_enums({"severity": "severe"}, {"properties": {"severity": {"enum": ["high"]}}})
+          == {"severity": "severe"})
+
+    import os as _os
+    _os.environ.setdefault("OPENAI_API_KEY", "test-key")
+    p = make_provider({"provider": "openai", "name": "gpt-4o",
+                       "base_url": "http://127.0.0.1:11434/api/generate"})
+    check("openai ignores the Ollama base_url", p.base_url == "https://api.openai.com/v1")
+
+    # next_index must not reuse an id after a dedup gap
+    with tempfile.TemporaryDirectory() as d:
+        store = FindingStore(Path(d) / "f.db")
+        for fid in ("F-g-001", "F-g-003"):
+            store.add_finding(Finding(id=fid, scan_id="g", source="s", target="a", vuln_class="x"))
+        check("next_index skips past gaps", store.next_index("g") == 4)
+        store.close()
+
+    # probe must not follow a redirect to an unscoped host
+    hits = []
+
+    class Redir(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            hits.append(self.path)
+            self.send_response(302)
+            self.send_header("Location", "http://127.0.0.1:1/elsewhere")
+            self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    srv = socketserver.TCPServer(("127.0.0.1", 0), Redir)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        r = probe(f"http://127.0.0.1:{srv.server_address[1]}/.env", timeout=3)
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    check("redirect not followed (3xx surfaced)", r.status == 302 and len(hits) == 1)
+
+    # a catch-all 200 HTML page is not an exposed .env / .git/config
+    def fake_probe(url, timeout=8.0):
+        if url.endswith("/.env"):
+            return ProbeResult(url=url, ok=True, status=200, body_snippet="<html>app</html>")
+        if url.endswith("/.git/config"):
+            return ProbeResult(url=url, ok=True, status=200,
+                               body_snippet='[core]\n\trepositoryformatversion = 0\n')
+        return ProbeResult(url=url, ok=True, status=404 if "/." in url or "txt" in url
+                           or "xml" in url else 200)
+    real_probe, real_resolve = profiler.probe, profiler.resolve
+    profiler.probe, profiler.resolve = fake_probe, (lambda h: (["127.0.0.1"], ""))
+    try:
+        surf = profiler.profile_target("http://h.test", host="h.test", max_rps=0)
+    finally:
+        profiler.probe, profiler.resolve = real_probe, real_resolve
+    flagged = {o["evidence"] for o in surf.observations if o["class"] == "exposed-sensitive-file"}
+    check("catch-all .env not flagged", "GET /.env -> 200" not in flagged)
+    check("real .git/config still flagged", "GET /.git/config -> 200" in flagged)
+
+    # SARIF: URL port is not a line; taint sink line used; severity on the rule
+    rows = [
+        {"id": "F-1", "scan_id": "s", "source": "recon:probe", "target": "h", "vuln_class": "X",
+         "severity": "low", "confidence": "", "location": "https://h:8443", "description": "",
+         "poc": "", "remediation": "", "state": "CANDIDATE", "created_at": "t", "evidence": "{}"},
+        {"id": "F-2", "scan_id": "s", "source": "taint:x", "target": "app.py", "vuln_class": "CMDi",
+         "severity": "high", "confidence": "", "location": "util.py:run (sink subprocess.run @ 12)",
+         "description": "", "poc": "", "remediation": "", "state": "CANDIDATE", "created_at": "t",
+         "evidence": json.dumps({"chain": ["app.py::f", "util.py::run"], "sink": {"line": 12}})},
+    ]
+    run = json.loads(render_sarif("s", None, rows))["runs"][0]
+    regions = [r["locations"][0]["physicalLocation"].get("region") for r in run["results"]]
+    check("sarif: URL port not a line number", regions[0] is None)
+    check("sarif: taint sink line used", regions[1] == {"startLine": 12})
+    check("sarif: security-severity on rule",
+          all("security-severity" in r["properties"] for r in run["tool"]["driver"]["rules"]))
+
+
+def test_diff_audit():
+    print("[incremental diff audit]")
+    import subprocess as sp
+    from security_agent.skills.source_audit import discover_files
+    from security_agent.vcs import changed_files
+
+    # discover_files `restrict` (pure, no git)
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
+        repo = Path(d)
+        (repo / "a.py").write_text("x=1\n", encoding="utf-8")
+        (repo / "b.py").write_text("y=2\n", encoding="utf-8")
+        only_a, _ = discover_files(repo, ["*.py"], [], 48, restrict={"a.py"})
+        check("restrict limits discovery", {f.name for f in only_a} == {"a.py"})
+        all_f, _ = discover_files(repo, ["*.py"], [], 48, restrict=None)
+        check("no restrict discovers all", {f.name for f in all_f} == {"a.py", "b.py"})
+        check("non-git repo reports error", changed_files(repo)[1] != "")
+
+    # vcs.changed_files on a real temp git repo
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
+        repo = Path(d)
+
+        def git(*a):
+            return sp.run(["git", "-C", str(repo), *a], capture_output=True, text=True)
+
+        git("init", "-q")
+        git("config", "user.email", "t@t")
+        git("config", "user.name", "t")
+        (repo / "tracked.py").write_text("print(1)\n", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-q", "-m", "init")
+        check("clean repo => no changes", changed_files(repo)[0] == set())
+        (repo / "tracked.py").write_text("print(2)\n", encoding="utf-8")   # modified
+        (repo / "new.py").write_text("print(3)\n", encoding="utf-8")       # untracked
+        changed, err = changed_files(repo)
+        check("no error on git repo", err == "")
+        check("detects modified + untracked", changed == {"tracked.py", "new.py"})
+
+
 if __name__ == "__main__":
     test_scope_guard()
     test_id_uniqueness_and_store()
@@ -668,5 +839,7 @@ if __name__ == "__main__":
     test_recon_enumeration()
     test_semantic_rag()
     test_human_gate()
+    test_review_regressions()
+    test_diff_audit()
     print(f"\n{_PASS} passed, {_FAIL} failed")
     sys.exit(1 if _FAIL else 0)

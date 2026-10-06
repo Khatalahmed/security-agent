@@ -17,7 +17,9 @@ _SEV_MAP = {
     "medium": ("warning", "5.0"), "low": ("note", "3.0"),
     "info": ("note", "1.0"), "unknown": ("note", "1.0"),
 }
-_LINE_RE = re.compile(r":(\d+)")
+# "file.ext:LINE" at the start of a location — not any ":digits" (a URL port in a
+# recon location like "https://host:8443" is not a line number).
+_LINE_RE = re.compile(r"^[^\s:]+\.\w+:(\d+)\b")
 
 
 def _rule_id(vuln_class: str) -> str:
@@ -32,14 +34,11 @@ def _file_and_line(f: dict) -> tuple[str, int | None]:
         uri = ev["chain"][-1].split("::")[0]
     if not uri:
         uri = f.get("target") or f.get("location") or "unknown"
-    line = None
+    sink = ev.get("sink")
+    if isinstance(sink, dict) and isinstance(sink.get("line"), int):
+        return uri, sink["line"]          # taint findings record the exact sink line
     m = _LINE_RE.search(f.get("location") or "")
-    if m:
-        try:
-            line = int(m.group(1))
-        except ValueError:
-            line = None
-    return uri, line
+    return uri, (int(m.group(1)) if m else None)
 
 
 def render_sarif(scan_id: str, scan_row: sqlite3.Row | None,
@@ -50,13 +49,17 @@ def render_sarif(scan_id: str, scan_row: sqlite3.Row | None,
     results = []
     for f in dicts:
         rid = _rule_id(f["vuln_class"])
+        level, sec = _SEV_MAP.get((f["severity"] or "unknown").lower(), ("note", "1.0"))
         if rid not in rules:
             rules[rid] = {
                 "id": rid,
                 "name": f["vuln_class"] or "Finding",
                 "shortDescription": {"text": f["vuln_class"] or "Finding"},
+                # GitHub code scanning reads security-severity from the RULE.
+                "properties": {"security-severity": sec, "tags": ["security"]},
             }
-        level, sec = _SEV_MAP.get((f["severity"] or "unknown").lower(), ("note", "1.0"))
+        elif float(sec) > float(rules[rid]["properties"]["security-severity"]):
+            rules[rid]["properties"]["security-severity"] = sec
         uri, line = _file_and_line(f)
         region = {"startLine": line} if line else {}
         phys = {"artifactLocation": {"uri": uri}}

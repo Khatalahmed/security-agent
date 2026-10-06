@@ -130,7 +130,7 @@ def build_graph(repo: Path, include_globs: list[str], skip_dirs: list[str]) -> G
     skip = set(skip_dirs)
 
     for p in sorted(repo.rglob("*")):
-        if not p.is_file() or any(part in skip for part in p.parts):
+        if not p.is_file() or any(part in skip for part in p.relative_to(repo).parts):
             continue
         if not any(fnmatch.fnmatch(p.name, g) for g in include_globs):
             continue
