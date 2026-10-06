@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Local, skill-driven AI security assessment platform (authorized testing only)."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
 dependencies = []   # zero runtime dependencies — stdlib only (tomllib, sqlite3, urllib, ast)
 keywords = ["security", "sast", "recon", "llm", "ollama", "pentest", "authorized-testing"]
 classifiers = [
