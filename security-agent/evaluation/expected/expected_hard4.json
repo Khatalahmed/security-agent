@@ -1,0 +1,26 @@
+{
+  "_doc": "Ground truth for the HARD4 corpus (evaluation/fixtures_hard4): 10 vulnerable + 10 safe-twin fixtures spanning new axes beyond hard3 - sanitizer-in-the-middle, 4-file chain depth, type-coercion / conditional-branch / loop guards, bypassable (substring) allowlists, and cross-file second-order flow. Each safe twin keeps a dangerous-looking builder/sink but is neutralized by a guard elsewhere on the chain. [] = any finding is a false positive.",
+  "fixtures": {
+    "vulnerable/cmdi_mid_concat": {"expected": ["command_injection"], "note": "raw concat in middle builder -> os.popen"},
+    "vulnerable/pathtrav_mid_raw": {"expected": ["path_traversal"], "note": "user path joined raw in middle builder -> open"},
+    "vulnerable/ssti_fstring_xfile": {"expected": ["ssti"], "note": "user text concatenated into template source -> render_template_string"},
+    "vulnerable/deser_4file_pickle": {"expected": ["deserialization"], "note": "4-file chain app->handle->decode->load -> pickle.loads"},
+    "vulnerable/sqli_concat_id": {"expected": ["sqli"], "note": "string id concatenated into SQL, no coercion"},
+    "vulnerable/ssrf_branch_gap": {"expected": ["ssrf"], "note": "host allowlist guards only the mode=checked branch; default path unguarded"},
+    "vulnerable/cmdi_loop_shell": {"expected": ["command_injection"], "note": "user args concatenated in a loop -> subprocess shell=True"},
+    "vulnerable/sqli_second_order_xfile": {"expected": ["sqli"], "note": "cross-file second-order: safe bound write, unsafe concat on read-back (taint blind spot)"},
+    "vulnerable/ssrf_allowlist_substring": {"expected": ["ssrf"], "note": "bypassable substring allowlist ('api.internal' in url)"},
+    "vulnerable/pathtrav_decode_xfile": {"expected": ["path_traversal"], "note": "'..' checked on encoded value; reader unquote()s after -> open"},
+
+    "safe/cmdi_mid_shlex": {"expected": [], "note": "middle builder shlex.quote()s the user value"},
+    "safe/pathtrav_mid_basename": {"expected": [], "note": "middle builder basename()s + anchors under fixed dir"},
+    "safe/ssti_context_xfile": {"expected": [], "note": "user passed as bound autoescaped context var into a fixed template"},
+    "safe/deser_4file_json": {"expected": [], "note": "same 4-file chain but json.loads (inert data only)"},
+    "safe/sqli_int_coerce": {"expected": [], "note": "id coerced to int() upstream; str(int) cannot inject"},
+    "safe/ssrf_branch_all": {"expected": [], "note": "host allowlist enforced unconditionally on every path"},
+    "safe/cmdi_loop_validated": {"expected": [], "note": "each file regex-validated in the loop + argv shell=False"},
+    "safe/sqli_second_order_param": {"expected": [], "note": "same store/read-back shape but read-back value is a bound parameter"},
+    "safe/ssrf_allowlist_exact": {"expected": [], "note": "exact parsed-hostname allowlist, not a substring test"},
+    "safe/pathtrav_decode_xfile_safe": {"expected": [], "note": "decode + basename upstream, before the reader"}
+  }
+}

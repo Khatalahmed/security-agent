@@ -460,6 +460,43 @@ def test_hard3_corpus():
         check(f"cross-file {cls} chain w/ app.py in slice: {fx.split('/')[-1]}", ok)
 
 
+def test_hard4_corpus():
+    print("[hard4 corpus integrity + diverse chains]")
+    import ast
+    from security_agent.analysis import build_graph, find_chains
+    base = Path(__file__).resolve().parent.parent / "evaluation"
+    root = base / "fixtures_hard4"
+    expected = json.loads((base / "expected" / "expected_hard4.json")
+                          .read_text(encoding="utf-8"))["fixtures"]
+
+    parse_ok = all(_parses(p) for p in root.rglob("*.py"))
+    check("all hard4 fixtures parse", parse_ok)
+    dirs = {f"{c.name}/{f.name}" for c in root.iterdir() if c.is_dir()
+            for f in c.iterdir() if f.is_dir()}
+    check("expected matches fixture dirs", dirs == set(expected))
+    check("10 vulnerable + 10 safe",
+          sum(1 for v in expected.values() if v["expected"]) == 10
+          and sum(1 for v in expected.values() if not v["expected"]) == 10)
+
+    # Spot-check representative diverse chains (incl. the 4-file deser depth).
+    for fx, cls in [("vulnerable/cmdi_mid_concat", "command_injection"),
+                    ("vulnerable/pathtrav_mid_raw", "path_traversal"),
+                    ("vulnerable/ssti_fstring_xfile", "ssti"),
+                    ("vulnerable/deser_4file_pickle", "deserialization")]:
+        g = build_graph(root / fx, ["*.py"], [])
+        cross = [c for c in find_chains(g)
+                 if c.crosses_files and c.sink.vuln_class == cls]
+        check(f"cross-file {cls} chain in {fx.split('/')[-1]}", len(cross) >= 1)
+
+
+def _parses(p):
+    import ast
+    try:
+        ast.parse(p.read_text(encoding="utf-8")); return True
+    except SyntaxError:
+        return False
+
+
 def test_hosted_providers():
     print("[hosted providers]")
     from security_agent.ai import make_provider, provider_is_local
@@ -950,6 +987,7 @@ if __name__ == "__main__":
     test_hard2_corpus()
     test_sink_name_collision()
     test_hard3_corpus()
+    test_hard4_corpus()
     test_hosted_providers()
     test_report_exports()
     test_validation()

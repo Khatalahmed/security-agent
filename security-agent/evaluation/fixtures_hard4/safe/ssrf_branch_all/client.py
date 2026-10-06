@@ -1,0 +1,5 @@
+import requests
+
+
+def fetch(url):
+    return requests.get(url, timeout=5).text[:200]   # looks like SSRF in isolation
