@@ -576,6 +576,11 @@ Broad false-positived on **every** safe twin: reading `executor.py`/`fetcher.py`
 
 **Verified:** full suite **196/196** (added hard3 integrity + 3-file-chain tests and the sink-collision regression); live head-to-head above; post-fix the cmdi chain set is `{command_injection}` only. Results logged (not committed) in `evaluation/hard3_h2h.log`; eval scans persisted under `hard3-taint-*` in the local (untracked) findings DB.
 
+### isalnum FP — root cause + prompt fix (measured 2026-10-06)
+Ran down caveat #1. The stored verdict showed it was **not** a slicing/grounding failure: the model saw the `isalnum()` guard, called it "insufficient," and emitted the PoC `' OR '1'='1` — which is non-alphanumeric and so would be rejected by the very guard it cited. A **reasoning** miss: it pattern-matched "raw concat = SQLi" and hand-waved the guard. Fix (no engine code — the graph/slice were correct): added a self-check to the `taint` skill `system_prompt` — *when you find a guard/allowlist/parameterization, construct your PoC and verify it would actually pass that guard; if the characters it needs are excluded, report nothing.* General, not overfit.
+
+**Measured (taint on hard3, before → after):** detection **3/3 → 3/3** (no recall loss), FP on safe twins **1/3 → 0/3**; the sqli safe twin cleared and was **stable across 3 repeats** (0 findings each) while the sqli vuln still detected. Honest limit: small sample (6 fixtures, one 7B model, temp 0.1) — a real precision/recall read awaits the expanded corpus (Phase 17) and a stronger-model comparison. The prompt change is a cheap, general precision lever; the human gate remains the backstop.
+
 ## 9c. Target architecture v2 (layered) — adopt *after* the Phase 3 experiment
 
 The v1 "~20 components" list is correct but flat. For a *standard* platform, organize it as **8 layers**. This is the version to build toward once the feasibility experiment passes.

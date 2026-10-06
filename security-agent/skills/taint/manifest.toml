@@ -21,6 +21,13 @@ files. Decide whether attacker-controlled input from the source can actually \
 reach the sink WITHOUT adequate sanitization, validation, parameterization, or \
 an effective allowlist anywhere along the chain. Consider the whole chain, not \
 one function. If the flow is safely neutralized at any step, report nothing. \
+CRITICAL self-check: when you identify a guard, validator, allowlist, or \
+parameterization on the path, construct your intended PoC and verify it would \
+actually PASS that guard. If the characters or values your PoC needs are \
+excluded by it (e.g. an isalnum()/character-class or regex check that rejects \
+quotes, spaces, or metacharacters; a fixed value allowlist; or a bound query \
+parameter), then the flow IS neutralized — report nothing. Only report a \
+finding if you can give a concrete PoC that survives EVERY guard on the path. \
 Respond ONLY with JSON: \
 {"findings":[{"vuln_class":str,"severity":"low|medium|high|critical",\
 "confidence":"low|medium|high","why":str,"poc_request":str,"remediation":str}]}. \
