@@ -391,6 +391,75 @@ def test_hard2_corpus():
           any(c.crosses_files and c.sink.vuln_class == "ssrf" for c in find_chains(g_safe)))
 
 
+def test_sink_name_collision():
+    print("[callgraph: execute* sink requires a receiver]")
+    from security_agent.analysis import build_graph, find_chains
+    with tempfile.TemporaryDirectory() as d:
+        repo = Path(d)
+        # A local function named execute() called bare must NOT be a SQL sink;
+        # a real cursor .execute(sql) must still be one.
+        (repo / "m.py").write_text(
+            "import sqlite3\n"
+            "def execute(cmd):\n"
+            "    return os.popen(cmd).read()\n"
+            "def run_sql(sql):\n"
+            "    return sqlite3.connect('x').execute(sql).fetchall()\n"
+            "def handler(req):\n"
+            "    x = req\n"
+            "    execute(x)\n"
+            "    run_sql(x)\n",
+            encoding="utf-8")
+        graph = build_graph(repo, ["*.py"], [])
+        execute_fn = next((f for f in graph.all_funcs if f.name == "execute"), None)
+        run_sql_fn = next((f for f in graph.all_funcs if f.name == "run_sql"), None)
+        check("bare execute() is not a sink",
+              execute_fn is not None and all(s.vuln_class != "sqli" for s in execute_fn.sinks))
+        check("cursor .execute(sql) is still a sqli sink",
+              run_sql_fn is not None and any(s.vuln_class == "sqli" for s in run_sql_fn.sinks))
+
+
+def test_hard3_corpus():
+    print("[hard3 corpus integrity + 3-file chains]")
+    import ast
+    from security_agent.analysis import build_graph, find_chains
+    base = Path(__file__).resolve().parent.parent / "evaluation"
+    root = base / "fixtures_hard3"
+    expected = json.loads((base / "expected" / "expected_hard3.json")
+                          .read_text(encoding="utf-8"))["fixtures"]
+
+    parse_ok = True
+    for p in root.rglob("*.py"):
+        try:
+            ast.parse(p.read_text(encoding="utf-8"))
+        except SyntaxError:
+            parse_ok = False
+    check("all hard3 fixtures parse", parse_ok)
+
+    dirs = {f"{c.name}/{f.name}" for c in root.iterdir() if c.is_dir()
+            for f in c.iterdir() if f.is_dir()}
+    check("expected matches fixture dirs", dirs == set(expected))
+    check("3 vulnerable + 3 safe",
+          sum(1 for v in expected.values() if v["expected"]) == 3
+          and sum(1 for v in expected.values() if not v["expected"]) == 3)
+
+    # Both the vulnerable fixture AND its safe twin must propose the SAME
+    # cross-file chain whose slice includes app.py (where the safe twin's
+    # upstream guard lives) - that is what lets taint judge the twin safe while
+    # a per-file reader of the unchanged sink file should false-positive.
+    from security_agent.analysis import assemble_slice
+    for fx, cls in [("vulnerable/cmdi_split_trusted_sink", "command_injection"),
+                    ("safe/cmdi_split_upstream_guard_safe", "command_injection"),
+                    ("vulnerable/ssrf_split_trusted_sink", "ssrf"),
+                    ("safe/ssrf_split_upstream_guard_safe", "ssrf"),
+                    ("vulnerable/sqli_split_trusted_sink", "sqli"),
+                    ("safe/sqli_split_upstream_guard_safe", "sqli")]:
+        graph = build_graph(root / fx, ["*.py"], [])
+        cross = [c for c in find_chains(graph)
+                 if c.crosses_files and c.sink.vuln_class == cls]
+        ok = bool(cross) and "app.py" in assemble_slice(cross[0])
+        check(f"cross-file {cls} chain w/ app.py in slice: {fx.split('/')[-1]}", ok)
+
+
 def test_hosted_providers():
     print("[hosted providers]")
     from security_agent.ai import make_provider, provider_is_local
@@ -879,6 +948,8 @@ if __name__ == "__main__":
     test_target_scan_planner()
     test_taint_callgraph()
     test_hard2_corpus()
+    test_sink_name_collision()
+    test_hard3_corpus()
     test_hosted_providers()
     test_report_exports()
     test_validation()

@@ -1,0 +1,29 @@
+{
+  "_doc": "Ground truth for the HARD3 corpus (evaluation/fixtures_hard3). Each case is split across THREE files so no single file is decisive: the SOURCE (app.py), the string/URL/SQL assembly (builder), and the SINK (executor/fetcher/dao). The sink files look dangerous in isolation but carry no local evidence of taint; for the SAFE twins the mitigation lives UPSTREAM in app.py, so a per-file reader should false-positive on the builder/sink files while a chain-aware (taint) analysis stays correct. [] = any finding is a false positive.",
+  "fixtures": {
+    "vulnerable/cmdi_split_trusted_sink": {
+      "expected": ["command_injection"],
+      "note": "user opts -> build_convert_cmd (concat) -> execute -> os.popen, across 3 files; executor documented as 'already-validated'"
+    },
+    "vulnerable/ssrf_split_trusted_sink": {
+      "expected": ["ssrf"],
+      "note": "user resource -> build_url -> fetch -> requests.get; fetcher documented as a 'vetted endpoint'"
+    },
+    "vulnerable/sqli_split_trusted_sink": {
+      "expected": ["sqli"],
+      "note": "user username -> build_lookup (concat) -> run_query -> execute; concat and execute in different files"
+    },
+    "safe/cmdi_split_upstream_guard_safe": {
+      "expected": [],
+      "note": "opts validated to [a-z0-9_-]+ UPSTREAM in app.py; executor unchanged (looks like RCE in isolation)"
+    },
+    "safe/ssrf_split_upstream_guard_safe": {
+      "expected": [],
+      "note": "resource allowlisted UPSTREAM + fixed internal host in builder; fetcher unchanged (looks like SSRF in isolation)"
+    },
+    "safe/sqli_split_upstream_guard_safe": {
+      "expected": [],
+      "note": "username validated isalnum() UPSTREAM; builder still concatenates (looks like SQLi in isolation)"
+    }
+  }
+}

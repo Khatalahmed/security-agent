@@ -558,6 +558,24 @@ Each vulnerable fixture has a **structurally identical safe twin** (same shape, 
 
 **Verified:** all 16 fixture files parse; ground truth is 1:1 with the fixture dirs; the deterministic call-graph finds correct cross-file chains for all three cross-file vulnerable fixtures and still raises the chain on the safe SSRF twin. Tests **185/185** (178 + 7). The live detection/precision A/B against a backend is the next measurement this corpus exists to enable.
 
+## 10n. Phase 16 — hard3 corpus proves taint earns its cost (measured 2026-10-06)
+hard2 (§Phase 15) couldn't separate broad per-file from taint: broad scored 100%/0-FP because the dangerous op stayed locally visible in some file. `evaluation/fixtures_hard3/` removes that crutch — each case is split across **three files** (SOURCE in `app.py`, string/URL/SQL assembly in a builder, the SINK in an executor/fetcher/dao that looks dangerous but takes an opaque arg), and for the **safe twins the mitigation lives UPSTREAM in `app.py`** (regex allowlist, resource allowlist + fixed host, `isalnum()`), while the builder/sink files are byte-for-byte as scary as the vulnerable twin's. 3 vulnerable + 3 safe twins (cmdi/ssrf/sqli).
+
+**Head-to-head (qwen2.5-coder:7b, local) — the decisive result:**
+
+| | Broad `source_audit` | Taint engine |
+|---|---|---|
+| Detection (3 vulnerable) | **3/3** | **3/3** (with cross-file chain path as evidence) |
+| FP on the 3 safe twins | **3/3 — precision collapses** | **1/3** (cleared cmdi + ssrf; FP only on sqli) |
+
+Broad false-positived on **every** safe twin: reading `executor.py`/`fetcher.py`/`query_builder.py` in isolation it sees an unguarded sink and fires, blind to the upstream guard. Taint read the full `app.py -> builder -> sink` slice (guard included) and correctly cleared the cmdi and ssrf twins. **This is the first data-backed evidence that the taint engine earns its extra cost** — precision broad structurally cannot reach on cross-file guards.
+
+**Two honest caveats this run exposed (both real):**
+1. **Taint still FP'd on the sqli safe twin.** The guard `username.isalnum()` genuinely neutralizes SQLi (no quotes possible), but the 7B model didn't credit it — the local model's judgment remains the weak link (advisory verdicts, human gate; §10f).
+2. **Callgraph bug found by the corpus — and fixed.** The cmdi fixtures produced a spurious `sqli` because a local helper named `execute(...)` collided with the SQL cursor `.execute` sink (`execute`/`executemany`/`executescript` are bare keys in `SINKS` *and* in `_TAIL_SINKS`). Fix: these cursor-method sinks now require an attribute receiver (`obj.execute`), so a bare `execute(...)` local call is no longer misread as SQL — `urlopen`/`render_template_string`/`send_file` (legitimately called bare) are unaffected, and real `conn.execute(sql)` / `sqlite3.connect(...).execute(sql)` still classify. Regression test `tests/test_spine.py::test_sink_name_collision`.
+
+**Verified:** full suite **196/196** (added hard3 integrity + 3-file-chain tests and the sink-collision regression); live head-to-head above; post-fix the cmdi chain set is `{command_injection}` only. Results logged (not committed) in `evaluation/hard3_h2h.log`; eval scans persisted under `hard3-taint-*` in the local (untracked) findings DB.
+
 ## 9c. Target architecture v2 (layered) — adopt *after* the Phase 3 experiment
 
 The v1 "~20 components" list is correct but flat. For a *standard* platform, organize it as **8 layers**. This is the version to build toward once the feasibility experiment passes.

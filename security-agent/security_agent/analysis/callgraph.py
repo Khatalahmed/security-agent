@@ -32,6 +32,10 @@ SINKS: dict[str, str] = {
 # attribute-tail sinks that match on any receiver (obj.execute(...), etc.)
 _TAIL_SINKS = {"execute", "executemany", "executescript", "urlopen",
                "render_template_string", "send_file"}
+# Of the tail sinks, the execute* family are DB cursor/connection METHODS. A bare
+# `execute(...)` call is a local function of the same name, not SQL, so these
+# match only as attribute calls (obj.execute / conn.cursor().execute), never bare.
+_METHOD_ONLY_SINKS = {"execute", "executemany", "executescript"}
 # external-input markers that make a function a taint SOURCE
 _SOURCE_NAMES = {"request", "flask_request"}
 _SOURCE_CALLS = {"input"}
@@ -116,7 +120,15 @@ def _analyze_function(node: ast.AST, file: str, source: str) -> FuncInfo:
                 info.calls.add(tail)
             if tail in _SOURCE_CALLS:
                 info.is_source = True
-            vuln = SINKS.get(dotted) or (SINKS.get(tail) if tail in _TAIL_SINKS else None)
+            vuln = SINKS.get(dotted)
+            if vuln is None and tail in _TAIL_SINKS:
+                vuln = SINKS.get(tail)
+            # The execute* family are cursor/connection METHODS; `execute` et al.
+            # are also bare keys in SINKS, so a local function call execute(...)
+            # would otherwise be misread as SQL. Require a receiver (obj.execute).
+            if vuln is not None and tail in _METHOD_ONLY_SINKS \
+                    and not isinstance(sub.func, ast.Attribute):
+                vuln = None
             if vuln:
                 info.sinks.append(SinkHit(callee=dotted or tail, vuln_class=vuln,
                                           lineno=getattr(sub, "lineno", info.lineno)))
