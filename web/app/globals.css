@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+/* Dark-first AppSec/developer-tool palette. Restrained accents, subtle borders. */
+:root {
+  --bg: #0a0c10;
+  --panel: #0f131a;
+  --panel-2: #141922;
+  --border: #1e2530;
+  --border-strong: #2a3340;
+  --fg: #e6edf3;
+  --muted: #8b98a9;
+  --faint: #5c6b7a;
+  --accent: #3b82f6;       /* restrained blue */
+  --accent-dim: #1e3a5f;
+  --ok: #22c55e;
+  --crit: #f43f5e;
+  --high: #fb923c;
+  --med: #eab308;
+  --low: #38bdf8;
+  --info: #64748b;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel2: var(--panel-2);
+  --color-border: var(--border);
+  --color-borderstrong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-ok: var(--ok);
+  --color-crit: var(--crit);
+  --color-high: var(--high);
+  --color-med: var(--med);
+  --color-low: var(--low);
+  --color-info: var(--info);
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+* { border-color: var(--border); }
+html, body { background: var(--bg); color: var(--fg); }
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--accent-dim); }
+
+/* thin scrollbars for the code/tool aesthetic */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #232c38; border-radius: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+.mono { font-family: var(--font-mono); }
+
+/* dark-theme React Flow controls to match the console */
+.react-flow__controls { box-shadow: none !important; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.react-flow__controls-button {
+  background: var(--panel-2) !important; border-bottom: 1px solid var(--border) !important;
+  color: var(--muted) !important; width: 26px; height: 26px;
+}
+.react-flow__controls-button:hover { background: var(--border) !important; }
+.react-flow__controls-button svg { fill: var(--muted); }
+.react-flow__attribution { display: none; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+.card-2 { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+.hairline { border-color: var(--border); }
