@@ -1,0 +1,4 @@
+# Third-party CVE code is NEVER vendored into this repo (licensing + size).
+# fetch.py reproducibly downloads it here at the pinned SHAs; keep it out of git.
+_fetched/
+_repos/

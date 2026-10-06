@@ -1,0 +1,75 @@
+{
+  "_doc": "Real CVE before/after-fix evaluation corpus (Option A). NO third-party code is vendored into this repository; fetch.py reproducibly clones each repo (blobless) and extracts the single changed source file at the exact vulnerable and fixed commit SHAs into _fetched/ (gitignored). The vulnerable commit (= fix commit's parent, unless stated) is the positive; the security-fix commit is the safe twin. Every pair here was VERIFIED by fetching and inspecting the fix diff. This is a tiny, hand-verified corpus for qualitative what-is/ isn't-supported reporting ONLY; NO accuracy is claimed from it.",
+  "budget_note": "Platform per-file analysis uses num_ctx=8192 (~8k tokens). Files larger than that are truncated by Ollama at call time (not an error); flagged per case as over_context.",
+  "cases": [
+    {
+      "id": "aiohttp_CVE-2024-23334_pathtrav",
+      "class": "path_traversal",
+      "cwe": "CWE-22",
+      "repo": "https://github.com/aio-libs/aiohttp",
+      "path": "aiohttp/web_urldispatcher.py",
+      "vuln_sha": "33ccdfb0a12690af5bb49bda2319ec0907fa7827",
+      "fix_sha": "1c335944d6a8b1298baf179b7c0b3069f10c514b",
+      "fix_pr": 8079,
+      "changed_lines": ["573-586", "645-657"],
+      "license": "Apache-2.0",
+      "memorization_risk": "high",
+      "size_bytes": {"vuln": 41548, "fixed": 42068},
+      "over_context": true,
+      "detector_note": "sink is aiohttp StaticResource path resolution (os.path.normpath/.resolve/relative_to); NOT in our SINKS set, and file exceeds num_ctx -> expect NOT detected (truncation + framework-shaped)."
+    },
+    {
+      "id": "flask-reuploaded_pathtrav_d64c6b2",
+      "class": "path_traversal",
+      "cwe": "CWE-22",
+      "repo": "https://github.com/jugmac00/flask-reuploaded",
+      "path": "src/flask_uploads/flask_uploads.py",
+      "vuln_sha": "9e813e919c4f8d9ef17c7fe8ecc0c2efa8fee118",
+      "fix_sha": "d64c6b2f71cb73734fc38baa0e3e156926361288",
+      "fix_pr": null,
+      "changed_lines": ["309-377"],
+      "license": "MIT",
+      "memorization_risk": "low-medium",
+      "size_bytes": {"vuln": 14120, "fixed": 15648},
+      "over_context": false,
+      "detector_note": "sink is os.path.join on a secure_filename-processed name (upload save path); os.path.join is NOT in our SINKS set, so taint sees no sink; broad may reason about it (file fits context)."
+    },
+    {
+      "id": "banks_SSTI_dbf7cef",
+      "class": "ssti",
+      "cwe": "CWE-1336",
+      "repo": "https://github.com/masci/banks",
+      "path": "src/banks/env.py",
+      "vuln_sha": "1aed538412e8f46682068bef69a719d0158f5d47",
+      "fix_sha": "dbf7cef7491ce88d237d689eccf443fab80166e6",
+      "fix_pr": 74,
+      "changed_lines": ["1-12"],
+      "license": "MIT",
+      "memorization_risk": "low",
+      "size_bytes": {"vuln": 1347, "fixed": 1397},
+      "over_context": false,
+      "detector_note": "fix is a one-line jinja2 Environment -> SandboxedEnvironment import swap; the analyzed file has NO sink and NO user input (the SSTI is elsewhere), so expect NOT detected in EITHER version. Included to document this limitation, not as a fair detection test."
+    },
+    {
+      "id": "frictionless_CVE-2026-93349_cmdi",
+      "class": "command_injection",
+      "cwe": "CWE-78",
+      "repo": "https://github.com/frictionlessdata/frictionless-py",
+      "path": "frictionless/console/commands/explore.py",
+      "vuln_sha": "43a63e0be8f332f82177f62e0099e667a93bd77b",
+      "fix_sha": "22cc5a2e620badb648132b61efe0786be81f9f79",
+      "fix_pr": 1820,
+      "changed_lines": ["62"],
+      "license": "MIT",
+      "memorization_risk": "low-medium",
+      "size_bytes": {"vuln": 1620, "fixed": 1887},
+      "over_context": false,
+      "role": "in-vocabulary CONTROL",
+      "detector_note": "vuln is os.system(f\"vd {' '.join(paths)}\") with user resource paths -> os.system IS in our SINKS (command_injection); fix uses subprocess.run([...]) argv. Small file, fits context. This case tests real-world detection for a pattern we DO model, isolating detection ability from vocabulary coverage."
+    }
+  ],
+  "not_sourced": {
+    "ssrf": "No verifiable small, permissively-licensed Python SSRF with a MERGED fix commit found via open search this pass (candidates were large repos or open issues without a merged safe-twin commit). Reported as a gap, not padded.",
+    "sqli_deser": "Not sourced to a verifiable small merged-fix pair this pass; the command_injection control (frictionless) covers one in-vocabulary class. Add sqli/deser from a curated dataset (e.g. CVEfixes) if expanding."
+  }
+}

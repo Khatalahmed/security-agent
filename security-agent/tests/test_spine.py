@@ -652,6 +652,37 @@ def test_real_corpus():
     check("every source has a license on file", lic_ok and bool(licenses))
 
 
+def test_realcve_manifest():
+    print("[real-CVE manifest integrity (offline)]")
+    import re
+    base = Path(__file__).resolve().parent.parent / "evaluation" / "fixtures_realcve"
+    manifest = json.loads((base / "manifest.json").read_text(encoding="utf-8"))
+    cases = manifest["cases"]
+    check("manifest has cases", len(cases) >= 1)
+    sha = re.compile(r"\A[0-9a-f]{40}\Z")
+    known = {"path_traversal", "ssti", "ssrf", "command_injection", "sqli",
+             "deserialization"}
+    req = {"id", "class", "cwe", "repo", "path", "vuln_sha", "fix_sha",
+           "license", "memorization_risk"}
+    ok_fields = ok_sha = ok_distinct = ok_class = True
+    for c in cases:
+        if not req.issubset(c):
+            ok_fields = False
+        if not (sha.match(c.get("vuln_sha", "")) and sha.match(c.get("fix_sha", ""))):
+            ok_sha = False
+        if c.get("vuln_sha") == c.get("fix_sha"):
+            ok_distinct = False
+        if c.get("class") not in known:
+            ok_class = False
+    check("every case has required fields", ok_fields)
+    check("vuln+fix SHAs are full 40-hex", ok_sha)
+    check("vuln and fix SHAs differ", ok_distinct)
+    check("classes are known/canonical", ok_class)
+    check("fetch.py present + no vendored code (gitignore)",
+          (base / "fetch.py").is_file()
+          and "_fetched/" in (base / ".gitignore").read_text(encoding="utf-8"))
+
+
 def test_hosted_providers():
     print("[hosted providers]")
     from security_agent.ai import make_provider, provider_is_local
@@ -1147,6 +1178,7 @@ if __name__ == "__main__":
     test_hard3_corpus()
     test_hard4_corpus()
     test_real_corpus()
+    test_realcve_manifest()
     test_hosted_providers()
     test_report_exports()
     test_validation()

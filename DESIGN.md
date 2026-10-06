@@ -662,6 +662,30 @@ First test on **real framework code**, not synthetic fixtures. `evaluation/fixtu
 
 **Honest caveats:** N=4 pilot; **memorization** — PyGoat is well-known OWASP code (its cmdi/deser detections may be inflated; the less-famous Vulpy sqli detecting is the cleaner signal); SSRF/SSTI/path-traversal deferred (these apps expose them only via fixed-host sinks or 1000-line files). A real *precision* claim needs the deferred Option-A CVE before/after-fix phase. Guard test `test_real_corpus` enforces parse + expected<->dirs + the IP guarantee (provenance + a license on file per source). Tests **229/229**; run logged (not committed) in `evaluation/real_broad_run.log`.
 
+## 10u. Phase 23 — real CVE before/after-fix corpus (Option A, measured 2026-10-06)
+The deferred "real precision" phase. `evaluation/fixtures_realcve/`: **no third-party code vendored** — `manifest.json` records each case (repo, exact vuln + fix SHAs, path, changed lines, CWE/class, license, memorization risk, size) and `fetch.py` reproducibly blobless-clones + extracts the one changed file at both SHAs into gitignored `_fetched/`. Every pair hand-verified by reading the fix diff. **Production analysis architecture was NOT changed** (per the review gate). N=4; **no accuracy claimed.**
+
+| Case | Class | in-vocab sink? | fits ctx? | license | memo |
+|---|---|:--:|:--:|---|---|
+| aiohttp CVE-2024-23334 | path_traversal | no (normpath/resolve) | no (42 KB) | Apache-2.0 | high |
+| flask-reuploaded | path_traversal | no (os.path.join) | yes | MIT | low-med |
+| banks #74 | ssti | no (jinja2.Environment) | yes | MIT | low |
+| frictionless CVE-2026-93349 | command_injection | **yes (os.system)** | yes | MIT | low-med |
+
+frictionless is the deliberate **in-vocabulary control** (sink we model, fits context), to separate detection ability from vocabulary coverage.
+
+**Result (qwen2.5-coder:7b, source_audit + taint + --taint-all-chains):**
+- **Vulnerable detection 1/4** — only frictionless (`os.system` f-string). The 3 out-of-vocabulary cases produced no signal (and aiohttp truncated at num_ctx).
+- **Fixed-version FPs 1/4** — frictionless's argv fix `subprocess.run(["vd","--",*paths])` was **also flagged command injection** (broad doesn't credit shell=False/argv).
+- **Clean vuln/fix discrimination 0/4.**
+- **taint: 0 source->sink chains in all 8 file-versions (0 taint calls)** — real entry points (CLI args, aiohttp/werkzeug request objects) and sinks (os.path.join, jinja2.Environment) are outside its vocabulary; the **authority merge never engaged**. Broad made all 8 model calls; ~23 min total.
+
+**What is / isn't supported (the point of this phase):**
+- *Supported, confirmed on real code:* broad detects a blatant in-vocabulary sink (`os.system`) in a real package.
+- *Not supported, surfaced:* (1) **vocabulary coverage** — framework path-traversal + jinja2 SSTI idioms unmodeled -> no signal on 3/4; (2) **context size** — 42 KB file truncates; (3) **precision/discrimination** — broad flags argv `subprocess.run` as cmdi (FP on the fix), 0/4 discriminated; (4) **taint on real entry points** — CLI/web-framework sources unrecognized, so taint + authority never fired.
+
+**Clearest actionable follow-up (NOT done here — production change, needs its own review):** broaden taint SOURCES/SINKS to real framework idioms (web-framework request objects, CLI argv, os.path.join->open/save, send_from_directory, jinja2.Environment/Template) and teach broad argv-vs-shell. **SSRF** still unsourced to a verifiable small merged-fix pair; a larger fair corpus wants a curated dataset (CVEfixes) or user-supplied SHAs. Guard test `test_realcve_manifest` (offline: required fields, 40-hex distinct SHAs, no vendored code). Tests **235/235**; run logged (not committed) in `evaluation/realcve_run.log`.
+
 ## 9c. Target architecture v2 (layered) — adopt *after* the Phase 3 experiment
 
 The v1 "~20 components" list is correct but flat. For a *standard* platform, organize it as **8 layers**. This is the version to build toward once the feasibility experiment passes.
