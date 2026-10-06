@@ -1,0 +1,4 @@
+# Optional web API layer only. The core security_agent package stays zero-dep;
+# these are needed solely to run the FastAPI presentation layer.
+fastapi>=0.110
+uvicorn[standard]>=0.29
