@@ -620,6 +620,38 @@ def _parses(p):
         return False
 
 
+def test_real_corpus():
+    print("[real-world corpus integrity + provenance/licensing]")
+    base = Path(__file__).resolve().parent.parent / "evaluation"
+    root = base / "fixtures_real"
+    expected = json.loads((base / "expected" / "expected_real.json")
+                          .read_text(encoding="utf-8"))["fixtures"]
+
+    check("all real fixtures parse", all(_parses(p) for p in root.rglob("*.py")))
+    dirs = {f"{c.name}/{f.name}" for c in root.iterdir()
+            if c.is_dir() and c.name in ("vulnerable", "safe")
+            for f in c.iterdir() if f.is_dir()}
+    check("expected matches fixture dirs", dirs == set(expected))
+    check("has vulnerable and safe cases",
+          any(v["expected"] for v in expected.values())
+          and any(not v["expected"] for v in expected.values()))
+
+    # IP guarantee: every vendored fixture must carry provenance, and every
+    # source it names must have its license text on file under LICENSES/.
+    licenses = {p.name for p in (root / "LICENSES").glob("*")} if (root / "LICENSES").is_dir() else set()
+    prov_ok, lic_ok = True, True
+    for fx in dirs:
+        prov = root / fx / "PROVENANCE.md"
+        if not prov.is_file():
+            prov_ok = False
+            continue
+        src = expected[fx].get("source", "")
+        if not any(src in name.lower() for name in licenses):
+            lic_ok = False
+    check("every fixture has PROVENANCE.md", prov_ok)
+    check("every source has a license on file", lic_ok and bool(licenses))
+
+
 def test_hosted_providers():
     print("[hosted providers]")
     from security_agent.ai import make_provider, provider_is_local
@@ -1114,6 +1146,7 @@ if __name__ == "__main__":
     test_sink_name_collision()
     test_hard3_corpus()
     test_hard4_corpus()
+    test_real_corpus()
     test_hosted_providers()
     test_report_exports()
     test_validation()

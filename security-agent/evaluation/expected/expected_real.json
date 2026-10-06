@@ -1,0 +1,23 @@
+{
+  "_doc": "Ground truth for the REAL-WORLD corpus (evaluation/fixtures_real): minimal, verbatim, MIT-licensed modules vendored from deliberately-vulnerable training apps (Vulpy, OWASP PyGoat), with per-fixture PROVENANCE.md. This is a RECALL corpus on real framework code (does the tool catch real Flask/Django vulns?), NOT a precision corpus — training apps ship no fixed twins, so false-positive measurement stays with fixtures_hard3/4 plus the one real clean negative here. On a real (noisy) file, findings OUTSIDE the labeled class are 'unlabeled', not automatically false positives; FP is counted only on the safe/ negative. Classes limited to what these apps expose as genuine, user-driven, small self-contained modules (sqli, command_injection via eval, deserialization); SSRF/SSTI/path-traversal in these apps have fixed (non-user) sinks or live in oversized files and are deferred to a future CVE-pair phase.",
+  "fixtures": {
+    "vulnerable/sqli_vulpy_libuser": {
+      "expected": ["sqli"],
+      "source": "vulpy", "cwe": "CWE-89", "memorized_risk": "low"
+    },
+    "vulnerable/cmdi_pygoat_eval": {
+      "expected": ["command_injection"],
+      "source": "pygoat", "cwe": "CWE-94", "memorized_risk": "medium",
+      "note": "eval() of request.POST; full noisy Django views module"
+    },
+    "vulnerable/deser_pygoat_pickle": {
+      "expected": ["deserialization"],
+      "source": "pygoat", "cwe": "CWE-502", "memorized_risk": "medium"
+    },
+    "safe/sqli_vulpy_libposts_parameterized": {
+      "expected": [],
+      "source": "vulpy", "cwe": null, "memorized_risk": "low",
+      "note": "real clean negative: parameterized queries in vulpy's bad/ dir"
+    }
+  }
+}
