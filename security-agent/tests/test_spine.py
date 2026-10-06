@@ -381,6 +381,54 @@ def test_taint_callgraph():
         check("slice includes the sink code", "subprocess.check_output" in sl)
 
 
+def test_taint_cross_file_skip():
+    print("[taint cost: skip same-file chains]")
+    from security_agent.analysis import run_taint_audit
+    skill = SkillRegistry.discover(SKILLS_DIR).get("taint")
+
+    class Counter(AIProvider):
+        name = "count"
+        def __init__(self): self.calls = 0
+        def generate(self, system, prompt, *, json=True):
+            self.calls += 1
+            return AIResult(text='{"findings":[]}', input_tokens=1, output_tokens=1, seconds=0.0)
+
+    with tempfile.TemporaryDirectory() as d:
+        repo = Path(d)
+        # same-file chain: handler -> sink (both in one.py)
+        (repo / "one.py").write_text(
+            "from flask import request\n"
+            "def handler():\n"
+            "    x = request.args.get('q')\n"
+            "    return sink(x)\n"
+            "def sink(cmd):\n"
+            "    import os\n"
+            "    return os.popen(cmd).read()\n", encoding="utf-8")
+        # cross-file chain: h2 (a.py) -> run (b.py)
+        (repo / "a.py").write_text(
+            "from flask import request\n"
+            "from b import run\n"
+            "def h2():\n"
+            "    y = request.args.get('q')\n"
+            "    return run(y)\n", encoding="utf-8")
+        (repo / "b.py").write_text(
+            "import subprocess\n"
+            "def run(c):\n"
+            "    return subprocess.check_output(c, shell=True)\n", encoding="utf-8")
+
+        p1 = Counter()
+        _f, st1 = run_taint_audit(repo, "t", p1, skill, ["*.py"], [],
+                                  cross_file_only=True)
+        check("cross-file-only: one model call (same-file skipped)", p1.calls == 1)
+        check("cross-file-only: same_file_skipped counted", st1["same_file_skipped"] == 1)
+
+        p2 = Counter()
+        _f2, st2 = run_taint_audit(repo, "t", p2, skill, ["*.py"], [],
+                                   cross_file_only=False)
+        check("all-chains: both chains analyzed", p2.calls == 2)
+        check("all-chains: nothing skipped", st2["same_file_skipped"] == 0)
+
+
 def test_hard2_corpus():
     print("[hard2 corpus integrity + cross-file chains]")
     import ast
@@ -1021,6 +1069,7 @@ if __name__ == "__main__":
     test_recon_findings()
     test_target_scan_planner()
     test_taint_callgraph()
+    test_taint_cross_file_skip()
     test_hard2_corpus()
     test_sink_name_collision()
     test_hard3_corpus()

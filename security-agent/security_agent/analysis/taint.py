@@ -35,18 +35,31 @@ def run_taint_audit(
     repo: Path, scan_id: str, provider: AIProvider, skill,
     include_globs: list[str], skip_dirs: list[str],
     start_index: int = 1, max_model_calls: int = 10,
+    cross_file_only: bool = True,
     on_progress: Callable[[str], None] = lambda m: None,
 ) -> tuple[list[Finding], dict]:
     graph = build_graph(repo, include_globs, skip_dirs)
     chains = find_chains(graph)
+    # Cost optimization (#6): taint's distinctive value is CROSS-FILE flow. A
+    # same-file source->sink chain is already within the per-file source_audit
+    # skill's view, so analyzing it here just spends an LLM call. Skip same-file
+    # chains by default; each chain is one model call on a slow CPU model.
+    same_file_skipped = 0
+    if cross_file_only:
+        before = len(chains)
+        chains = [c for c in chains if c.crosses_files]
+        same_file_skipped = before - len(chains)
     # Prioritize cross-file chains (the whole point); cap model calls for CPU.
     chains.sort(key=lambda c: (not c.crosses_files, len(c.funcs)))
     budget = chains[:max_model_calls]
-    on_progress(f"{len(graph.all_funcs)} functions, {len(chains)} source->sink chain(s); "
-                f"analyzing {len(budget)} (cross-file first)")
+    skip_note = (f", {same_file_skipped} same-file skipped (covered by source_audit)"
+                 if same_file_skipped else "")
+    on_progress(f"{len(graph.all_funcs)} functions, {len(chains)} source->sink chain(s)"
+                f"{skip_note}; analyzing {len(budget)} (cross-file first)")
 
     stats = {"functions": len(graph.all_funcs), "chains": len(chains),
-             "analyzed": len(budget), "json_ok": 0, "json_bad": 0,
+             "analyzed": len(budget), "same_file_skipped": same_file_skipped,
+             "json_ok": 0, "json_bad": 0,
              "schema_invalid": 0, "total_seconds": 0.0, "skill": skill.name,
              "parse_errors": len(graph.errors), "cleared": []}
     findings: list[Finding] = []

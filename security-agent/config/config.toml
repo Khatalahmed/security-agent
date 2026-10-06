@@ -28,6 +28,10 @@ max_rps = 2                        # politeness cap (requests/sec) for target-mo
 include_globs = ["*.py"]           # which files to analyze (MVP: Python, vulnhuntr's domain)
 skip_dirs = [".git", ".venv", "venv", "node_modules", "__pycache__", ".work", "tests"]
 max_file_kb = 48                   # files larger than this are skipped (would blow num_ctx)
+# Taint engine spends one LLM call per source->sink chain. Same-file chains are
+# already covered by the per-file source_audit skill, so skip them by default and
+# spend calls only on taint's distinctive cross-file flows. CLI: --taint-all-chains.
+taint_cross_file_only = true
 
 [skills]
 dir = "skills"                        # project-root directory of skill definitions

@@ -29,6 +29,10 @@ _DEFAULTS: dict = {
         "include_globs": ["*.py"],
         "skip_dirs": [".git", ".venv", "venv", "node_modules", "__pycache__", ".work", "tests"],
         "max_file_kb": 48,
+        # Taint is the CROSS-FILE engine; same-file source->sink chains are already
+        # covered by the per-file source_audit skill, so analyzing them again just
+        # spends LLM calls. Skip them by default; --taint-all-chains overrides.
+        "taint_cross_file_only": True,
     },
     "skills": {
         "dir": "skills",     # project-root directory of skill definitions

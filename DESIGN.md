@@ -620,6 +620,16 @@ Completes Phase 17's open question properly. That phase showed taint's false pos
 
 **Honest limit:** authority is only as good as taint's "neutralized" verdict. On the hardest guards even 7B-taint still FP'd (`shlex.quote`, `basename` — Phase 17), so it emits no cleared verdict there and broad's FP on those survives. The policy helps exactly where taint succeeds (exact allowlist, argv validator, int-coerce, json-not-pickle), which Phase 17 measured as the majority. Tests **210/210** (added `test_taint_authority`: sink-file + on-chain suppression, class/file/own-finding exclusions, empty no-op).
 
+## 10r. Phase 20 — runtime/cost: taint skips same-file chains (built 2026-10-06)
+First #6 (optimize runtime/cost) win, and a cheap one. The taint engine spends **one LLM call per source->sink chain** — the dominant cost on a slow CPU model. A *same-file* chain (handler and sink in one file) is already inside the per-file `source_audit` skill's view, so paying a second model call for it is waste. Taint's distinctive value is **cross-file** flow.
+
+- `run_taint_audit(..., cross_file_only=True)` filters out same-file chains before budgeting model calls; `stats["same_file_skipped"]` counts them and the progress line notes "N same-file skipped (covered by source_audit)".
+- Config `[audit].taint_cross_file_only = true` (default); CLI `--taint-all-chains` overrides for taint-alone runs that need same-file coverage too.
+- **Savings:** one model call (tens of seconds to minutes on CPU) per same-file chain. On the hard2/3/4 corpora the figure is 0 (every planted chain is cross-file by design), so detection/precision numbers are unchanged; the win lands on real repos, which are full of same-file source->sink patterns.
+- **Honest framing:** this narrows taint to its complement role. The recommended `--skills source_audit,taint` pipeline is unaffected (broad covers same-file); only a *taint-alone* run loses same-file coverage, which `--taint-all-chains` restores.
+
+Tests **214/214** (added `test_taint_cross_file_skip`: a temp repo with one same-file + one cross-file chain makes **1** model call cross-file-only vs **2** with `--taint-all-chains`).
+
 ## 9c. Target architecture v2 (layered) — adopt *after* the Phase 3 experiment
 
 The v1 "~20 components" list is correct but flat. For a *standard* platform, organize it as **8 layers**. This is the version to build toward once the feasibility experiment passes.

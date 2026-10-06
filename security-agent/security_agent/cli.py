@@ -201,10 +201,13 @@ def cmd_audit(args) -> int:
         if skill is not None:
             print(f"[*] running skill: {skill.name} v{skill.version} (engine={skill.engine})")
         if skill is not None and skill.engine == "taint":
+            cross_only = (cfg.audit.get("taint_cross_file_only", True)
+                          and not getattr(args, "taint_all_chains", False))
             f_s, st = run_taint_audit(
                 repo=repo, scan_id=scan_id, provider=provider, skill=skill,
                 include_globs=cfg.audit["include_globs"], skip_dirs=cfg.audit["skip_dirs"],
                 start_index=store.next_index(scan_id) + len(findings),
+                cross_file_only=cross_only,
                 on_progress=lambda m: print(f"    {m}"),
             )
         else:
@@ -661,6 +664,9 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--out", help="report output path (.md)")
     a.add_argument("--skills", help="comma-separated skill names to run "
                                     "(overrides config [skills].enabled; omit to use config)")
+    a.add_argument("--taint-all-chains", action="store_true",
+                   help="taint: analyze same-file chains too (default: cross-file "
+                        "only, since source_audit already covers same-file sinks)")
     a.add_argument("--rag", action="store_true",
                    help="ground skill prompts with retrieved disclosed-vuln patterns")
     a.add_argument("--diff", nargs="?", const=_DIFF_WORKING, metavar="REF",
