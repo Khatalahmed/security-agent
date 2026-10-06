@@ -597,6 +597,15 @@ Ran down caveat #1. The stored verdict showed it was **not** a slicing/grounding
 
 **Verified:** deterministic integrity + chain-proposal guarantees in `tests/test_spine.py::test_hard4_corpus`; suite **203/203**; run logged (not committed) in `evaluation/hard4_h2h.log`. Decision deferred to Phase 18: test a stronger *local* model on hard4 before investing in more corpus or merge-policy work.
 
+## 10p. Phase 18 — stronger local model (qwen2.5-coder:14b): hardware-gated (measured 2026-10-06)
+Tested a stronger *local* model (user's constraint: strictly Ollama, no hosted) against hard4 to see whether it credits the guards 7B could not (`shlex.quote`, `basename`, decode-upstream). Outcome: **functional but impractical on this machine.**
+- Pulled `qwen2.5-coder:14b` (9.0 GB Q4). Verified it works with a correct run: taint on `vulnerable/cmdi_mid_concat` -> Command Injection, **JSON ok 1/1** — the model reasons and emits valid JSON.
+- But: **587 s (~10 min) for that single fixture**, with **0.3 GB RAM free** after load (16.9 GB box, ~5.5 GB free before). The 10 GB model swaps to disk; a full 20-fixture taint run is ~3 h of thrashing and starves the rest of the system. §9's "14B painfully slow on this hardware" is confirmed with numbers.
+- **Decision: continue on `qwen2.5-coder:7b`** (unchanged default). The stronger-local-model lever is real but RAM/GPU-gated — revisit on a machine with more memory or a GPU; architecture is unchanged (swap `[model].name`).
+- Process note: an initial "14B scored 0/20" result was a **bug in the eval script** (`--config` is a top-level arg and must precede the `audit` subcommand; placed after, every invocation errored and was miscounted as 0) — voided, not a model finding. The real config.toml was never modified (14B ran via a scratch config + scratch DB).
+
+**Consequence for the roadmap:** with the stronger-model path gated, the next precision lever that needs **no model** is a **merge policy** for Phase 17's finding — taint's 5 FPs are a subset of broad's 8, so capturing taint's precision means making taint authoritative (trust its "clean"/"neutralized" verdict over broad's per-file "flag") rather than unioning both. That is the recommended next investment over more corpus.
+
 ## 9c. Target architecture v2 (layered) — adopt *after* the Phase 3 experiment
 
 The v1 "~20 components" list is correct but flat. For a *standard* platform, organize it as **8 layers**. This is the version to build toward once the feasibility experiment passes.
