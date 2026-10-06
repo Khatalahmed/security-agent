@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ScanLine, ListChecks, Share2, FlaskConical,
-  FileText, Settings, ShieldCheck, Lock,
+  FileText, Settings, ShieldCheck, Lock, MonitorPlay,
 } from "lucide-react";
 import { OllamaBadge } from "./ollama-status";
 import { cls } from "@/lib/ui";
@@ -21,6 +21,8 @@ const NAV = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
+  // The cinematic demo is full-bleed — no nav chrome.
+  if (path.startsWith("/demo")) return <>{children}</>;
   return (
     <div className="flex min-h-screen">
       <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-panel md:flex">
@@ -49,6 +51,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
+        <div className="border-t border-border p-2">
+          <Link href="/demo"
+            className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors"
+            style={{ color: "var(--accent)", background: "var(--accent-dim)" }}>
+            <MonitorPlay size={16} /> Play demo
+          </Link>
+        </div>
         <div className="border-t border-border p-3 text-[10px] text-faint">
           <div className="flex items-center gap-1.5"><Lock size={11} /> Source stays on this machine</div>
           <div className="mt-1 mono">local-only · Ollama</div>

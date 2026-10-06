@@ -63,6 +63,39 @@ body {
 .react-flow__controls-button:hover { background: var(--border) !important; }
 .react-flow__controls-button svg { fill: var(--muted); }
 .react-flow__attribution { display: none; }
+
+/* ---- cinematic demo animations (zero-dep, CSS-driven) ---- */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes popIn { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: scale(1); } }
+@keyframes slamIn { 0% { opacity: 0; transform: scale(1.5); filter: blur(6px); } 60% { opacity: 1; } 100% { opacity: 1; transform: scale(1); filter: blur(0); } }
+@keyframes growY { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes flowDash { to { stroke-dashoffset: -28; } }
+@keyframes glowPulse { 0%,100% { box-shadow: 0 0 0 0 var(--glow, rgba(59,130,246,.0)); } 50% { box-shadow: 0 0 36px -6px var(--glow, rgba(59,130,246,.6)); } }
+@keyframes ringPulse { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,.5); } 100% { box-shadow: 0 0 0 14px rgba(34,197,94,0); } }
+@keyframes sweep { 0% { transform: translateY(-100%); opacity: 0; } 10% { opacity: 1; } 100% { transform: translateY(2200%); opacity: 0; } }
+@keyframes caret { 50% { opacity: 0; } }
+@keyframes driftGrid { to { background-position: 0 44px, 44px 0; } }
+
+.anim-fadeup { animation: fadeUp .7s cubic-bezier(.2,.7,.2,1) both; }
+.anim-fadein { animation: fadeIn .9s ease both; }
+.anim-pop { animation: popIn .5s cubic-bezier(.2,1.2,.3,1) both; }
+.anim-slam { animation: slamIn .55s cubic-bezier(.2,1.3,.3,1) both; }
+.bar-grow { transform-origin: bottom; animation: growY .9s cubic-bezier(.2,.8,.2,1) both; }
+.edge-flow { stroke-dasharray: 7 7; animation: flowDash .7s linear infinite; }
+.glow { animation: glowPulse 2.4s ease-in-out infinite; }
+.ring-pulse { animation: ringPulse 1.6s ease-out infinite; }
+.caret::after { content: "▌"; margin-left: 1px; animation: caret 1s steps(1) infinite; color: var(--accent); }
+
+.demo-grid {
+  background-image:
+    linear-gradient(to right, rgba(60,80,110,.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(60,80,110,.08) 1px, transparent 1px);
+  background-size: 44px 44px, 44px 44px;
+  animation: driftGrid 8s linear infinite;
+}
+.demo-vignette { background: radial-gradient(120% 90% at 50% 20%, transparent 40%, rgba(0,0,0,.55) 100%); }
+.scanline { position: absolute; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: sweep 2.2s ease-in-out infinite; }
 .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
 .card-2 { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
 .hairline { border-color: var(--border); }
