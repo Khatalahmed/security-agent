@@ -642,6 +642,26 @@ Second #6 win. The per-file `source_audit` skill pays one LLM call per file; a f
 
 Tests **224/224** (added `test_skip_inert`: classification of source/sink/pure-logic/bare-execute/parse-error/secret-only files + call-counting 1-vs-2).
 
+## 10t. Phase 22 — real-world corpus pilot (#5, built + measured 2026-10-06)
+First test on **real framework code**, not synthetic fixtures. `evaluation/fixtures_real/`: minimal, verbatim, **MIT-licensed** modules vendored from deliberately-vulnerable training apps (Vulpy, OWASP PyGoat), each with `PROVENANCE.md` (repo + commit SHA + path) and upstream licenses under `LICENSES/`. Sourcing/IP decisions (training apps; vendor-with-provenance) were the user's. Deliberately a **recall** corpus (training apps ship no fixed twins → precision stays with hard3/4 + one real clean negative).
+
+**Cases:** sqli (Vulpy `bad/libuser.py`), command_injection via `eval` (PyGoat `introduction/mitre.py` — full 246-line noisy Django module), deserialization (PyGoat `insec_des_lab/main.py`), and a real clean negative (Vulpy `bad/libposts.py`, parameterized `?` queries).
+
+**Broad `source_audit`, qwen2.5-coder:7b:**
+
+| Fixture | Expected | Found | s |
+|---|---|---|--:|
+| sqli_vulpy_libuser | sqli | sqli | 123 |
+| cmdi_pygoat_eval | command_injection | command_injection, xss | 226 |
+| deser_pygoat_pickle | deserialization | deserialization | 67 |
+| safe/…libposts (parameterized) | [] | **sqli (FP)** | 111 |
+
+- **Detection 3/3** on real vulns — including signal-in-noise (found the `eval` cmdi inside a 25-handler module).
+- **Precision: broad false-positived on the real clean negative** — flagged sqli on correctly-parameterized code. Matches the hard4 finding (per-file broad over-flags), now confirmed on *real* code.
+- The extra `xss` on `mitre.py` is **off-label -> not scored FP** (scoring rule: off-class findings on real noisy files are unlabeled); unverified (plausible latent XSS in that module, or a hallucination).
+
+**Honest caveats:** N=4 pilot; **memorization** — PyGoat is well-known OWASP code (its cmdi/deser detections may be inflated; the less-famous Vulpy sqli detecting is the cleaner signal); SSRF/SSTI/path-traversal deferred (these apps expose them only via fixed-host sinks or 1000-line files). A real *precision* claim needs the deferred Option-A CVE before/after-fix phase. Guard test `test_real_corpus` enforces parse + expected<->dirs + the IP guarantee (provenance + a license on file per source). Tests **229/229**; run logged (not committed) in `evaluation/real_broad_run.log`.
+
 ## 9c. Target architecture v2 (layered) — adopt *after* the Phase 3 experiment
 
 The v1 "~20 components" list is correct but flat. For a *standard* platform, organize it as **8 layers**. This is the version to build toward once the feasibility experiment passes.
