@@ -58,7 +58,7 @@ export default function FindingDetail() {
           </section>
 
           {/* hero: data flow */}
-          <section data-tour="dataflow">
+          <section>
             <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-faint">Source → Sink data flow</h2>
             {flow.loading ? <Loading label="Building graph…" />
               : flow.error ? <ErrorState message={flow.error} />
@@ -86,7 +86,7 @@ export default function FindingDetail() {
 
         {/* side: actions + validation */}
         <div className="space-y-4">
-          <section data-tour="confirm" className="card p-4">
+          <section className="card p-4">
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-faint">Human review</h2>
             {terminal ? (
               <div className="flex items-center gap-2 text-sm">

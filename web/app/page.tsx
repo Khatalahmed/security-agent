@@ -46,12 +46,12 @@ export default function Overview() {
       <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
         <div>
           <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <Stat label="Scans" value={all.length} />
-            <Stat label="Findings" value={totals.findings} />
-            <Stat label="Critical" value={totals.critical} accent="var(--crit)" />
-            <Stat label="High" value={totals.high} accent="var(--high)" />
-            <Stat label="Medium" value={totals.medium} accent="var(--med)" />
-            <Stat label="Low" value={totals.low} accent="var(--low)" />
+            <Stat label="Scans" value={all.length} delay={0} />
+            <Stat label="Findings" value={totals.findings} delay={70} />
+            <Stat label="Critical" value={totals.critical} accent="var(--crit)" delay={140} />
+            <Stat label="High" value={totals.high} accent="var(--high)" delay={210} />
+            <Stat label="Medium" value={totals.medium} accent="var(--med)" delay={280} />
+            <Stat label="Low" value={totals.low} accent="var(--low)" delay={350} />
           </div>
 
           <div className="card p-4">

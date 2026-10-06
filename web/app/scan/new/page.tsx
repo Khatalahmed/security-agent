@@ -42,7 +42,7 @@ export default function NewScan() {
     <div className="max-w-3xl">
       <PageTitle title="New Scan" subtitle="Runs the real engine locally via Ollama. Source stays on this machine." />
 
-      <div data-tour="scan-form" className="card space-y-4 p-5">
+      <div className="card space-y-4 p-5">
         <Field label="Repository / path" hint="An absolute or relative path on this machine (the backend validates it).">
           <input value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="e.g. evaluation/fixtures_hard4/vulnerable/cmdi_mid_concat"
             className="mono w-full rounded-md border border-border bg-panel px-3 py-2 text-sm outline-none focus:border-borderstrong" />

@@ -16,7 +16,7 @@ const ROLE: Record<DataFlowRole, { color: string; bg: string; icon: typeof Radio
   finding:        { color: "var(--crit)",   bg: "rgba(244,63,94,.14)", icon: Bug, title: "FINDING" },
 };
 
-type FlowNodeData = DataFlowNode & { onPick: (n: DataFlowNode) => void; selected: boolean };
+type FlowNodeData = DataFlowNode & { onPick: (n: DataFlowNode) => void; selected: boolean; idx: number };
 
 function FlowNode({ data }: NodeProps) {
   const d = data as unknown as FlowNodeData;
@@ -24,10 +24,11 @@ function FlowNode({ data }: NodeProps) {
   const Icon = r.icon;
   return (
     <div onClick={() => d.onPick(d)}
-      className="w-[260px] cursor-pointer rounded-lg border px-3 py-2.5 text-left transition-shadow"
+      className="df-node w-[260px] cursor-pointer rounded-lg border px-3 py-2.5 text-left transition-shadow"
       style={{
         background: r.bg, borderColor: `${r.color}${d.selected ? "" : "55"}`,
         boxShadow: d.selected ? `0 0 0 1px ${r.color}, 0 8px 24px -8px ${r.color}66` : "none",
+        animationDelay: `${(d.idx ?? 0) * 420}ms`,
       }}>
       <Handle type="target" position={Position.Top} style={{ background: r.color, border: "none", width: 7, height: 7 }} />
       <div className="flex items-center gap-1.5 text-[10px] font-semibold tracking-widest" style={{ color: r.color }}>
@@ -52,12 +53,12 @@ export function DataFlowGraph({ flow }: { flow: DataFlow }) {
   const { nodes, edges } = useMemo(() => {
     const ns: Node[] = flow.nodes.map((n, i) => ({
       id: n.id, type: "flow", position: { x: 40, y: i * 130 },
-      data: { ...n, selected: picked?.id === n.id, onPick: setPicked },
+      data: { ...n, idx: i, selected: picked?.id === n.id, onPick: setPicked },
       draggable: false,
     }));
     const es: Edge[] = flow.edges.map((e, i) => ({
       id: `e${i}`, source: e.from, target: e.to, animated: true,
-      style: { stroke: "var(--border-strong)", strokeWidth: 1.5 },
+      style: { stroke: "var(--accent)", strokeWidth: 2, opacity: 0.8 },
     }));
     return { nodes: ns, edges: es };
   }, [flow, picked]);

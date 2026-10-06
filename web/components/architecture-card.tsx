@@ -16,7 +16,7 @@ const STEPS = [
 
 export function ArchitectureCard() {
   return (
-    <div data-tour="pipeline" className="card p-5">
+    <div className="card p-5">
       <div className="mb-4 flex items-center justify-between">
         <div>
           <div className="text-sm font-semibold">Analysis pipeline</div>

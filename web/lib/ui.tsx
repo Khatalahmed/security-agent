@@ -59,9 +59,9 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
   return <div className={`card p-4 ${className}`}>{children}</div>;
 }
 
-export function Stat({ label, value, accent }: { label: string; value: ReactNode; accent?: string }) {
+export function Stat({ label, value, accent, delay }: { label: string; value: ReactNode; accent?: string; delay?: number }) {
   return (
-    <div className="card px-4 py-3">
+    <div className="card rise px-4 py-3" style={delay ? { animationDelay: `${delay}ms` } : undefined}>
       <div className="text-[11px] uppercase tracking-wide text-faint">{label}</div>
       <div className="mt-1 text-2xl font-semibold" style={accent ? { color: accent } : undefined}>{value}</div>
     </div>
