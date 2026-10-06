@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Callable, TYPE_CHECKING
 
 from security_agent.ai.base import AIProvider
+from security_agent.analysis.callgraph import file_is_interesting
 from security_agent.findings.models import Finding, State
 from security_agent.skillengine.validator import normalize_enums, validate_item
 
@@ -90,6 +91,7 @@ def run_source_audit(
     skill: "Skill | None" = None,
     knowledge: list[str] | None = None,
     restrict_files: set[str] | None = None,
+    skip_inert: bool = False,
 ) -> tuple[list[Finding], dict]:
     """Analyze a repository. Returns (findings, stats).
 
@@ -124,8 +126,16 @@ def run_source_audit(
 
     for fp in files:
         rel = fp.relative_to(repo)
-        on_progress(f"analyzing {rel} ...")
         code = fp.read_text(encoding="utf-8", errors="replace")
+        # Optional cost pre-filter (#6): skip files with no taint SOURCE and no
+        # SINK — a dataflow-oriented auditor has nothing to act on. Trades away
+        # non-dataflow coverage (e.g. hardcoded secrets) in those files, so it is
+        # opt-in; parse failures are never skipped (file_is_interesting -> True).
+        if skip_inert and not file_is_interesting(code):
+            stats["inert_skipped"] = stats.get("inert_skipped", 0) + 1
+            on_progress(f"skip {rel} (no source/sink)")
+            continue
+        on_progress(f"analyzing {rel} ...")
         prompt = kb_block + f"File: {rel}\n\n```\n{code}\n```"
         try:
             result = provider.generate(system_prompt, prompt, json=True)

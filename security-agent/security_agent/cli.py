@@ -219,6 +219,8 @@ def cmd_audit(args) -> int:
                 on_progress=lambda m: print(f"    {m}"),
                 skill=skill, knowledge=_knowledge_for(skill),
                 restrict_files=restrict_files,
+                skip_inert=(cfg.audit.get("skip_inert_files", False)
+                            or getattr(args, "skip_inert", False)),
             )
         findings.extend(f_s)
         stats_all.append(st)
@@ -667,6 +669,9 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--taint-all-chains", action="store_true",
                    help="taint: analyze same-file chains too (default: cross-file "
                         "only, since source_audit already covers same-file sinks)")
+    a.add_argument("--skip-inert", action="store_true",
+                   help="broad: skip files with no taint source/sink (saves LLM "
+                        "calls; trades away non-dataflow coverage e.g. secrets)")
     a.add_argument("--rag", action="store_true",
                    help="ground skill prompts with retrieved disclosed-vuln patterns")
     a.add_argument("--diff", nargs="?", const=_DIFF_WORKING, metavar="REF",

@@ -98,6 +98,21 @@ def _callee_names(call: ast.Call) -> tuple[str, str]:
     return "", ""
 
 
+def _sink_for_call(call: ast.Call) -> str | None:
+    """Canonical vuln class if this call is a dangerous sink, else None. Single
+    source of truth so the call-graph and the inert-file pre-filter never diverge.
+    The execute* family are cursor METHODS (also bare keys in SINKS), so a bare
+    local execute(...) is NOT a sink — require an attribute receiver."""
+    dotted, tail = _callee_names(call)
+    vuln = SINKS.get(dotted)
+    if vuln is None and tail in _TAIL_SINKS:
+        vuln = SINKS.get(tail)
+    if vuln is not None and tail in _METHOD_ONLY_SINKS \
+            and not isinstance(call.func, ast.Attribute):
+        return None
+    return vuln
+
+
 def _analyze_function(node: ast.AST, file: str, source: str) -> FuncInfo:
     name = getattr(node, "name", "<lambda>")
     info = FuncInfo(name=name, file=file, lineno=getattr(node, "lineno", 0),
@@ -120,19 +135,38 @@ def _analyze_function(node: ast.AST, file: str, source: str) -> FuncInfo:
                 info.calls.add(tail)
             if tail in _SOURCE_CALLS:
                 info.is_source = True
-            vuln = SINKS.get(dotted)
-            if vuln is None and tail in _TAIL_SINKS:
-                vuln = SINKS.get(tail)
-            # The execute* family are cursor/connection METHODS; `execute` et al.
-            # are also bare keys in SINKS, so a local function call execute(...)
-            # would otherwise be misread as SQL. Require a receiver (obj.execute).
-            if vuln is not None and tail in _METHOD_ONLY_SINKS \
-                    and not isinstance(sub.func, ast.Attribute):
-                vuln = None
+            vuln = _sink_for_call(sub)
             if vuln:
                 info.sinks.append(SinkHit(callee=dotted or tail, vuln_class=vuln,
                                           lineno=getattr(sub, "lineno", info.lineno)))
     return info
+
+
+def file_is_interesting(source: str) -> bool:
+    """True if the file contains any taint SOURCE (request.*, input()) or dangerous
+    SINK — i.e. something a dataflow-oriented auditor could act on. Used by the
+    optional `--skip-inert` pre-filter to avoid spending an LLM call on files with
+    no source and no sink. Best-effort: a parse error returns True (never skip what
+    we cannot analyze). NOTE: this is dataflow-scoped — it does NOT detect
+    non-dataflow issues like hardcoded secrets, so skipping inert files trades away
+    that coverage (documented at the call site)."""
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return True
+    for sub in ast.walk(tree):
+        if isinstance(sub, ast.Attribute) and isinstance(sub.value, ast.Name) \
+                and sub.value.id in _SOURCE_NAMES:
+            return True
+        if isinstance(sub, ast.Name) and sub.id in _SOURCE_NAMES:
+            return True
+        if isinstance(sub, ast.Call):
+            _dotted, tail = _callee_names(sub)
+            if tail in _SOURCE_CALLS:
+                return True
+            if _sink_for_call(sub):
+                return True
+    return False
 
 
 def build_graph(repo: Path, include_globs: list[str], skip_dirs: list[str]) -> Graph:

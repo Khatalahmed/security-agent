@@ -33,6 +33,10 @@ _DEFAULTS: dict = {
         # covered by the per-file source_audit skill, so analyzing them again just
         # spends LLM calls. Skip them by default; --taint-all-chains overrides.
         "taint_cross_file_only": True,
+        # Opt-in: skip per-file (broad) analysis of files with no taint source and
+        # no sink. Saves LLM calls but trades away non-dataflow coverage (e.g.
+        # hardcoded secrets) in those files, so OFF by default. CLI: --skip-inert.
+        "skip_inert_files": False,
     },
     "skills": {
         "dir": "skills",     # project-root directory of skill definitions

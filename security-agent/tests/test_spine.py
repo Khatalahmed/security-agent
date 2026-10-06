@@ -381,6 +381,45 @@ def test_taint_callgraph():
         check("slice includes the sink code", "subprocess.check_output" in sl)
 
 
+def test_skip_inert():
+    print("[broad cost: skip inert files]")
+    from security_agent.analysis.callgraph import file_is_interesting
+    from security_agent.skills.source_audit import run_source_audit
+    check("source makes a file interesting",
+          file_is_interesting("from flask import request\nx = request.args.get('q')\n"))
+    check("sink makes a file interesting",
+          file_is_interesting("import os\nos.popen(cmd)\n"))
+    check("pure logic is inert", not file_is_interesting("def f():\n    return 1 + 2\n"))
+    check("bare execute() is inert (not a sink)",
+          not file_is_interesting("def execute(c):\n    return c\nexecute('x')\n"))
+    check("parse error is never skipped", file_is_interesting("def (:\n"))
+    # documents the tradeoff: a hardcoded-secret-only file reads as inert
+    check("secret-only file is inert (coverage tradeoff)",
+          not file_is_interesting('AWS_KEY = "AKIAIOSFODNN7EXAMPLE"\n'))
+
+    class Counter(AIProvider):
+        name = "count"
+        def __init__(self): self.calls = 0
+        def generate(self, system, prompt, *, json=True):
+            self.calls += 1
+            return AIResult(text='{"findings":[]}', input_tokens=1, output_tokens=1, seconds=0.0)
+
+    with tempfile.TemporaryDirectory() as d:
+        repo = Path(d)
+        (repo / "inert.py").write_text("X = 'hi'\ndef f():\n    return 1 + 2\n", encoding="utf-8")
+        (repo / "live.py").write_text(
+            "from flask import request\nimport os\n"
+            "def g():\n    return os.popen(request.args.get('q')).read()\n", encoding="utf-8")
+        p1 = Counter()
+        _f, st1 = run_source_audit(repo, "s", p1, ["*.py"], [], 48, skip_inert=True)
+        check("skip_inert: only the live file analyzed", p1.calls == 1)
+        check("skip_inert: inert counted", st1.get("inert_skipped") == 1)
+        p2 = Counter()
+        _f2, st2 = run_source_audit(repo, "s", p2, ["*.py"], [], 48, skip_inert=False)
+        check("default: both files analyzed", p2.calls == 2)
+        check("default: nothing inert-skipped", st2.get("inert_skipped", 0) == 0)
+
+
 def test_taint_cross_file_skip():
     print("[taint cost: skip same-file chains]")
     from security_agent.analysis import run_taint_audit
@@ -1069,6 +1108,7 @@ if __name__ == "__main__":
     test_recon_findings()
     test_target_scan_planner()
     test_taint_callgraph()
+    test_skip_inert()
     test_taint_cross_file_skip()
     test_hard2_corpus()
     test_sink_name_collision()

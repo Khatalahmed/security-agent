@@ -32,6 +32,11 @@ max_file_kb = 48                   # files larger than this are skipped (would b
 # already covered by the per-file source_audit skill, so skip them by default and
 # spend calls only on taint's distinctive cross-file flows. CLI: --taint-all-chains.
 taint_cross_file_only = true
+# Opt-in: skip per-file (broad) analysis of files with no taint source and no
+# sink. Saves LLM calls on inert files, but a file whose only issue is
+# non-dataflow (e.g. a hardcoded secret) would be skipped too, so OFF by default.
+# CLI: --skip-inert.
+skip_inert_files = false
 
 [skills]
 dir = "skills"                        # project-root directory of skill definitions

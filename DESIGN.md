@@ -630,6 +630,18 @@ First #6 (optimize runtime/cost) win, and a cheap one. The taint engine spends *
 
 Tests **214/214** (added `test_taint_cross_file_skip`: a temp repo with one same-file + one cross-file chain makes **1** model call cross-file-only vs **2** with `--taint-all-chains`).
 
+## 10s. Phase 21 — runtime/cost: skip broad on inert files (built 2026-10-06)
+Second #6 win. The per-file `source_audit` skill pays one LLM call per file; a file with **no taint source and no sink** gives a dataflow-oriented auditor nothing to act on, so analyzing it is waste.
+- `analysis/callgraph.py::file_is_interesting(code)` — AST check for any SOURCE (`request.*`, `input()`) or SINK, built on a new shared `_sink_for_call` helper that `_analyze_function` now also uses (single source of truth — this refactor also closed a re-introduced copy of the `execute` bare-key bug my first draft of the filter had). Parse errors return True (never skip the unanalyzable).
+- `run_source_audit(skip_inert=True)` skips inert files before the model call; `stats["inert_skipped"]`.
+- Opt-in: config `[audit].skip_inert_files = false` (default) + CLI `--skip-inert`.
+
+**Live proof** (`source_audit --skip-inert` on `fixtures_hard4/vulnerable/cmdi_mid_concat`, 7B): `builder.py` (pure `"ping " + host` concat, no source/sink) was **skipped**, `app.py` and `runner.py` analyzed, and **command_injection was still detected** — 1 of 3 files skipped (~33% fewer calls) with no recall loss on the dataflow bug.
+
+**Honest caveat (why opt-in, not default):** the filter is dataflow-scoped. A file whose only issue is non-dataflow — a hardcoded secret, a pure-logic flaw — reads as inert and would be skipped, losing that finding. So it ships OFF; turn it on when speed matters and pair with a dedicated secrets pass if secrets are in scope. A test asserts a secret-only file is classified inert, documenting the tradeoff rather than hiding it.
+
+Tests **224/224** (added `test_skip_inert`: classification of source/sink/pure-logic/bare-execute/parse-error/secret-only files + call-counting 1-vs-2).
+
 ## 9c. Target architecture v2 (layered) — adopt *after* the Phase 3 experiment
 
 The v1 "~20 components" list is correct but flat. For a *standard* platform, organize it as **8 layers**. This is the version to build toward once the feasibility experiment passes.
