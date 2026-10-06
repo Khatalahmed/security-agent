@@ -22,7 +22,7 @@ from security_agent.config import load_config, load_scope
 from security_agent.safety import ScopeGuard
 from security_agent.audit_log import AuditLog
 from security_agent.ai import make_provider, provider_is_local
-from security_agent.findings import FindingStore, State, dedup_findings
+from security_agent.findings import FindingStore, State, dedup_findings, apply_taint_authority
 from security_agent.skills import run_source_audit
 from security_agent.skillengine import (
     SkillRegistry, Context, plan, detect_languages, filter_enabled,
@@ -220,11 +220,23 @@ def cmd_audit(args) -> int:
         findings.extend(f_s)
         stats_all.append(st)
 
-    # Cross-skill de-duplication: merge the same bug reported by >1 skill.
     raw_count = len(findings)
+
+    # Taint-authoritative suppression: when the cross-file taint engine judged a
+    # source->sink chain neutralized, drop per-file (broad) false positives on
+    # that same flow+class. Taint saw the whole slice; the per-file reader didn't.
+    cleared = [c for st in stats_all for c in st.get("cleared", [])]
+    findings, suppressed = apply_taint_authority(findings, cleared)
+    if suppressed:
+        print(f"[*] taint-authoritative: suppressed {len(suppressed)} per-file "
+              f"finding(s) on chains taint judged safe:")
+        for s in suppressed:
+            print(f"    drop {s['id']} ({s['vuln_class']} in {s['target']}; {s['source']})")
+
+    # Cross-skill de-duplication: merge the same bug reported by >1 skill.
     findings, merges = dedup_findings(findings)
     if merges:
-        print(f"[*] merged {raw_count - len(findings)} cross-skill duplicate(s):")
+        print(f"[*] merged {len(merges)} cross-skill duplicate(s):")
         for m in merges:
             print(f"    {m['kept']} <- {', '.join(m['merged'])}  "
                   f"({m['vuln_class']} in {m['target']}; sources: {', '.join(m['sources'])})")
@@ -233,9 +245,10 @@ def cmd_audit(args) -> int:
         store.add_finding(f)
     stats = _merge_stats(stats_all)
     stats["raw_findings"] = raw_count
-    stats["merged_duplicates"] = raw_count - len(findings)
+    stats["taint_suppressed"] = len(suppressed)
+    stats["merged_duplicates"] = raw_count - len(suppressed) - len(findings)
     log.record("audit_finished", scan_id=scan_id, findings=len(findings),
-               merges=merges, stats=stats)
+               merges=merges, taint_suppressed=suppressed, stats=stats)
 
     units = []
     if stats["files_analyzed"]:

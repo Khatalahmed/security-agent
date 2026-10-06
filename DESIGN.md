@@ -606,6 +606,20 @@ Tested a stronger *local* model (user's constraint: strictly Ollama, no hosted) 
 
 **Consequence for the roadmap:** with the stronger-model path gated, the next precision lever that needs **no model** is a **merge policy** for Phase 17's finding — taint's 5 FPs are a subset of broad's 8, so capturing taint's precision means making taint authoritative (trust its "clean"/"neutralized" verdict over broad's per-file "flag") rather than unioning both. That is the recommended next investment over more corpus.
 
+## 10q. Phase 19 — taint-authoritative merge policy (built 2026-10-06)
+Completes Phase 17's open question properly. That phase showed taint's false positives are a **subset** of broad's, so a naive union ("flag if either fires") keeps broad's FPs and gains nothing. The fix is to make taint **authoritative on the flows it judged**: when the cross-file engine reasons over a whole source->sink slice and reports *nothing*, that "neutralized" verdict outranks a per-file reader that only saw the sink in isolation.
+
+**Mechanism (model-free, no new deps):**
+- `analysis/taint.py` now records a **cleared verdict** `{class, chain_files, sink_*}` for every analyzed chain where the model returned an empty findings list (an explicit "report nothing"). Ambiguous outputs (malformed/invalid items) are NOT treated as cleared — conservative.
+- `findings/dedup.py::apply_taint_authority(findings, cleared)` drops any **non-taint** finding whose canonical class matches a cleared verdict AND whose file lies on that cleared chain. Taint's own findings, other classes, and off-chain files are never touched.
+- `cli.py cmd_audit` applies it after skills run, before dedup, with a `taint-authoritative: suppressed N` line + audit-log record; `stats["taint_suppressed"]`. No-op when taint isn't run (default behavior unchanged).
+
+**Live proof** (`--skills source_audit,taint` on `fixtures_hard4/safe/ssrf_allowlist_exact`, qwen2.5-coder:7b): broad raised **2** SSRF FPs (app.py + client.py); taint judged the `f -> fetch` chain neutralized (it saw the exact-host allowlist); the policy dropped **both** broad FPs -> **0 findings** on the correctly-defended fixture. Broad-alone = 2 FP; broad+taint-authority = 0 FP.
+
+**Recommended pipeline** for precision-sensitive audits: `--skills source_audit,taint` — broad for recall (it still catches the second-order case taint structurally misses, Phase 17), taint to veto broad's cross-file-guard FPs.
+
+**Honest limit:** authority is only as good as taint's "neutralized" verdict. On the hardest guards even 7B-taint still FP'd (`shlex.quote`, `basename` — Phase 17), so it emits no cleared verdict there and broad's FP on those survives. The policy helps exactly where taint succeeds (exact allowlist, argv validator, int-coerce, json-not-pickle), which Phase 17 measured as the majority. Tests **210/210** (added `test_taint_authority`: sink-file + on-chain suppression, class/file/own-finding exclusions, empty no-op).
+
 ## 9c. Target architecture v2 (layered) — adopt *after* the Phase 3 experiment
 
 The v1 "~20 components" list is correct but flat. For a *standard* platform, organize it as **8 layers**. This is the version to build toward once the feasibility experiment passes.

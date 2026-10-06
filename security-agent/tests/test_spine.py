@@ -218,6 +218,42 @@ def _finding(fid, source, target, vuln_class, severity, line_hint, location=""):
     )
 
 
+def test_taint_authority():
+    print("[taint-authoritative suppression]")
+    from security_agent.findings import apply_taint_authority
+    # taint cleared the command_injection chain app.py -> runner.py
+    cleared = [{"class": "command_injection", "sink_file": "runner.py",
+                "sink_line": 4, "chain_files": ["app.py", "runner.py"]}]
+
+    broad_sink = _finding("F-t-001", "source_audit:ollama", "runner.py",
+                          "Command Injection", "high", "os.popen(cmd)")
+    broad_builder = _finding("F-t-002", "source_audit:ollama", "app.py",
+                             "command injection", "high", "run(build(x))")
+    broad_other_class = _finding("F-t-003", "source_audit:ollama", "runner.py",
+                                 "SSRF", "high", "requests.get(u)")
+    broad_other_file = _finding("F-t-004", "source_audit:ollama", "unrelated.py",
+                                "Command Injection", "high", "os.system(z)")
+    taint_own = Finding(id="F-t-005", scan_id="t", source="taint:ollama",
+                        target="runner.py", vuln_class="Command Injection",
+                        severity="high", location="runner.py:run",
+                        evidence={"engine": "taint", "raw_item": {}})
+
+    kept, suppressed = apply_taint_authority(
+        [broad_sink, broad_builder, broad_other_class, broad_other_file, taint_own],
+        cleared)
+    kept_ids = {f.id for f in kept}
+    check("broad FP on cleared sink file suppressed", "F-t-001" not in kept_ids)
+    check("broad FP elsewhere on cleared chain suppressed", "F-t-002" not in kept_ids)
+    check("different class on cleared file kept", "F-t-003" in kept_ids)
+    check("same class off the cleared chain kept", "F-t-004" in kept_ids)
+    check("taint's own finding never suppressed", "F-t-005" in kept_ids)
+    check("two suppressions recorded", len(suppressed) == 2)
+
+    # no cleared verdicts -> no-op (default behavior unchanged)
+    kept2, supp2 = apply_taint_authority([broad_sink, broad_other_file], [])
+    check("empty cleared is a no-op", len(kept2) == 2 and supp2 == [])
+
+
 def test_canonical_class():
     print("[canonical class]")
     check("LFI variants collapse",
@@ -980,6 +1016,7 @@ if __name__ == "__main__":
     test_validator()
     test_canonical_class()
     test_dedup()
+    test_taint_authority()
     test_recon_header_analysis()
     test_recon_findings()
     test_target_scan_planner()

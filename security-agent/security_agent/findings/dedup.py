@@ -141,6 +141,41 @@ def _cluster_by_sig(group: list[Finding]) -> list[list[Finding]]:
     return clusters
 
 
+def apply_taint_authority(
+    findings: list[Finding], cleared: list[dict],
+) -> tuple[list[Finding], list[dict]]:
+    """Taint-authoritative suppression (DESIGN Phase 18/17 merge policy).
+
+    The cross-file taint engine reasons over a whole source->sink slice, so when
+    it judges a chain *neutralized* it is more trustworthy than a per-file reader
+    that only saw the sink in isolation. `cleared` is the list of neutralized-chain
+    verdicts taint emitted ({class, chain_files, ...}). We drop any NON-taint
+    finding whose canonical class matches a cleared verdict AND whose file lies on
+    that cleared chain — that is exactly the per-file false positive taint corrects.
+
+    Conservative: taint's own findings are never dropped; a finding is suppressed
+    only when taint explicitly cleared a chain of the same class through its file.
+    Returns (kept_findings, suppressed_records)."""
+    if not cleared:
+        return findings, []
+    cleared_files: dict[str, set[str]] = defaultdict(set)
+    for c in cleared:
+        cleared_files[c["class"]].update(c.get("chain_files", []))
+
+    kept: list[Finding] = []
+    suppressed: list[dict] = []
+    for f in findings:
+        is_taint = isinstance(f.evidence, dict) and f.evidence.get("engine") == "taint"
+        files = cleared_files.get(canonical_class(f.vuln_class), set())
+        if not is_taint and f.target in files:
+            suppressed.append({"id": f.id, "source": f.source,
+                               "vuln_class": f.vuln_class, "target": f.target,
+                               "reason": "taint judged this source->sink chain neutralized"})
+        else:
+            kept.append(f)
+    return kept, suppressed
+
+
 def dedup_findings(findings: list[Finding]) -> tuple[list[Finding], list[dict]]:
     """Merge cross-skill duplicates. Returns (deduped_findings, merge_records)."""
     buckets: dict[tuple[str, str], list[Finding]] = defaultdict(list)

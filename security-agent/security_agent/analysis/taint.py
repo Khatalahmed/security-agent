@@ -17,6 +17,7 @@ from typing import Callable
 
 from security_agent.ai.base import AIProvider
 from security_agent.analysis.callgraph import assemble_slice, build_graph, find_chains
+from security_agent.findings.dedup import canonical_class
 from security_agent.findings.models import Finding, State
 from security_agent.skillengine.validator import normalize_enums, validate_item
 
@@ -47,7 +48,7 @@ def run_taint_audit(
     stats = {"functions": len(graph.all_funcs), "chains": len(chains),
              "analyzed": len(budget), "json_ok": 0, "json_bad": 0,
              "schema_invalid": 0, "total_seconds": 0.0, "skill": skill.name,
-             "parse_errors": len(graph.errors)}
+             "parse_errors": len(graph.errors), "cleared": []}
     findings: list[Finding] = []
     counter = start_index
 
@@ -66,9 +67,20 @@ def run_taint_audit(
         stats["json_ok" if ok else "json_bad"] += 1
         if not ok:
             continue
-        for item in items:
-            if not isinstance(item, dict):
-                continue
+        dict_items = [i for i in items if isinstance(i, dict)]
+        if not dict_items:
+            # The model examined the whole source->sink slice and reported nothing:
+            # an explicit "this chain is neutralized" verdict. Record it so the
+            # taint-authoritative merge can suppress broad per-file FPs on this flow.
+            stats["cleared"].append({
+                "class": canonical_class(chain.sink.vuln_class),
+                "sink_file": chain.funcs[-1].file,
+                "sink_line": chain.sink.lineno,
+                "chain_files": sorted({f.file for f in chain.funcs}),
+            })
+            on_progress("  -> 0 finding(s) [chain judged neutralized]")
+            continue
+        for item in dict_items:
             item = normalize_enums(item, skill.finding_schema)
             if validate_item(item, skill.finding_schema):
                 stats["schema_invalid"] += 1
@@ -97,7 +109,7 @@ def run_taint_audit(
                     "model_seconds": round(result.seconds, 1),
                 },
             ))
-        on_progress(f"  -> {len([i for i in items if isinstance(i, dict)])} finding(s)")
+        on_progress(f"  -> {len(dict_items)} finding(s)")
 
     stats["total_seconds"] = round(stats["total_seconds"], 1)
     return findings, stats
