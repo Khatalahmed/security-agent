@@ -45,7 +45,7 @@ export default function BenchmarksPage() {
         <div className="mono mt-1 text-[11px] text-faint">bars = TP / planted bugs per committed run · false-positives shown in the table</div>
       </div>
 
-      <div className="card mb-5 overflow-x-auto">
+      <div data-tour="bench" className="card mb-5 overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-faint">

@@ -20,7 +20,7 @@ export function OllamaBadge() {
   const online = s?.online;
   const color = !loaded ? "var(--faint)" : online ? "var(--ok)" : "var(--crit)";
   return (
-    <div className="card-2 flex items-center gap-3 px-3 py-1.5" title={s?.endpoint}>
+    <div data-tour="ollama" className="card-2 flex items-center gap-3 px-3 py-1.5" title={s?.endpoint}>
       <span className="relative flex h-2.5 w-2.5">
         {online && <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" style={{ background: color }} />}
         <span className="relative inline-flex h-2.5 w-2.5 rounded-full" style={{ background: color }} />

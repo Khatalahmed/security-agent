@@ -40,7 +40,7 @@ export function FindingsTable({ findings }: { findings: Finding[] }) {
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+      <div data-tour="filters" className="mb-3 flex flex-wrap items-center gap-2">
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search class, file, evidence…"
@@ -68,7 +68,8 @@ export function FindingsTable({ findings }: { findings: Finding[] }) {
             </thead>
             <tbody>
               {rows.map((f, i) => (
-                <tr key={f.id} className={cls("border-b border-border/60 hover:bg-panel2", i % 2 ? "bg-black/10" : "")}>
+                <tr key={f.id} data-tour="finding-row" data-method={f.method}
+                  className={cls("border-b border-border/60 hover:bg-panel2", i % 2 ? "bg-black/10" : "")}>
                   <td className="px-3 py-2.5"><SeverityBadge severity={f.severity} /></td>
                   <td className="px-3 py-2.5">
                     <Link href={`/findings/${encodeURIComponent(f.id)}`} className="font-medium text-fg hover:text-accent">
