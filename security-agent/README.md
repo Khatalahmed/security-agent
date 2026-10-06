@@ -1,5 +1,7 @@
 # security-agent
 
+[![ci](https://github.com/Khatalahmed/security-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Khatalahmed/security-agent/actions/workflows/ci.yml)
+
 A **local, skill-driven AI security assessment platform**. Ollama is the local
 reasoning backend; this project is the agent/skill runtime. See
 [`../DESIGN.md`](../DESIGN.md) for the full architecture.
