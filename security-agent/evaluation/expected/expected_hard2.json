@@ -1,0 +1,45 @@
+{
+  "_doc": "Ground truth for the HARDER corpus (evaluation/fixtures_hard2). This corpus targets the levers DESIGN.md says are untested: cross-file flows whose SINK looks benign in isolation (so per-file analysis should miss them and taint should catch them), one second-order (stored-then-reused) pair, and one check-before-decode ordering pair. Each vulnerable fixture is paired with a structurally look-alike safe twin; [] means any finding is a false positive.",
+  "fixtures": {
+    "vulnerable/cmdi_benign_helper_crossfile": {
+      "expected": ["command_injection"],
+      "note": "user format -> exec_report -> _run -> os.popen, across app.py/reporting.py; _run looks like generic plumbing in isolation"
+    },
+    "vulnerable/sqli_second_order": {
+      "expected": ["sqli"],
+      "note": "nickname stored via a bound param (safe write), later read back and concatenated into SQL in a different handler (second-order)"
+    },
+    "vulnerable/ssrf_fetch_helper_crossfile": {
+      "expected": ["ssrf"],
+      "note": "user url -> get_json across app.py/httpclient.py; no scheme/host restriction on requests.get"
+    },
+    "vulnerable/path_traversal_decode_after_check": {
+      "expected": ["path_traversal"],
+      "note": "'..' guard runs on the URL-encoded value; unquote() happens after, so %2e%2e%2f bypasses"
+    },
+    "vulnerable/deser_pickle_crossfile": {
+      "expected": ["deserialization"],
+      "note": "base64 request blob -> load_state across app.py/session.py -> pickle.loads (RCE)"
+    },
+    "safe/cmdi_listargs_crossfile_safe": {
+      "expected": [],
+      "note": "same cross-file chain shape, but subprocess.run(argv, shell=False) - user value is one literal arg"
+    },
+    "safe/sqli_second_order_param_safe": {
+      "expected": [],
+      "note": "same store/read-back shape, but the read-back value is bound as a query parameter"
+    },
+    "safe/ssrf_allowlist_crossfile_safe": {
+      "expected": [],
+      "note": "same cross-file fetch shape, but https + exact host allowlist + redirects disabled"
+    },
+    "safe/path_traversal_decode_then_check_safe": {
+      "expected": [],
+      "note": "decode first, basename, join under fixed BASE, abspath-prefix confirmed"
+    },
+    "safe/deser_json_crossfile_safe": {
+      "expected": [],
+      "note": "same decode-then-load_state shape, but json.loads cannot instantiate objects"
+    }
+  }
+}

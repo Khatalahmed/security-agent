@@ -345,6 +345,52 @@ def test_taint_callgraph():
         check("slice includes the sink code", "subprocess.check_output" in sl)
 
 
+def test_hard2_corpus():
+    print("[hard2 corpus integrity + cross-file chains]")
+    import ast
+    from security_agent.analysis import build_graph, find_chains
+    base = Path(__file__).resolve().parent.parent / "evaluation"
+    root = base / "fixtures_hard2"
+    expected = json.loads((base / "expected" / "expected_hard2.json")
+                          .read_text(encoding="utf-8"))["fixtures"]
+
+    # every fixture .py parses
+    parse_ok = True
+    for p in root.rglob("*.py"):
+        try:
+            ast.parse(p.read_text(encoding="utf-8"))
+        except SyntaxError:
+            parse_ok = False
+    check("all hard2 fixtures parse", parse_ok)
+
+    # ground truth <-> directories are in 1:1 correspondence
+    dirs = {f"{c.name}/{f.name}" for c in root.iterdir() if c.is_dir()
+            for f in c.iterdir() if f.is_dir()}
+    check("expected matches fixture dirs", dirs == set(expected))
+    check("5 vulnerable + 5 safe",
+          sum(1 for v in expected.values() if v["expected"]) == 5
+          and sum(1 for v in expected.values() if not v["expected"]) == 5)
+
+    # the taint graph must propose the right CROSS-FILE chain for each
+    # cross-file vulnerable fixture (the lever this corpus exists to exercise).
+    want = {
+        "cmdi_benign_helper_crossfile": "command_injection",
+        "ssrf_fetch_helper_crossfile": "ssrf",
+        "deser_pickle_crossfile": "deserialization",
+    }
+    for name, cls in want.items():
+        graph = build_graph(root / "vulnerable" / name, ["*.py"], [])
+        cross = [c for c in find_chains(graph)
+                 if c.crosses_files and c.sink.vuln_class == cls]
+        check(f"cross-file {cls} chain found in {name}", len(cross) >= 1)
+
+    # the safe cross-file twin proposes the SAME chain (graph can't tell;
+    # the model must adjudicate it safe) -> the corpus truly tests precision.
+    g_safe = build_graph(root / "safe" / "ssrf_allowlist_crossfile_safe", ["*.py"], [])
+    check("safe ssrf twin still yields a cross-file chain",
+          any(c.crosses_files and c.sink.vuln_class == "ssrf" for c in find_chains(g_safe)))
+
+
 def test_hosted_providers():
     print("[hosted providers]")
     from security_agent.ai import make_provider, provider_is_local
@@ -832,6 +878,7 @@ if __name__ == "__main__":
     test_recon_findings()
     test_target_scan_planner()
     test_taint_callgraph()
+    test_hard2_corpus()
     test_hosted_providers()
     test_report_exports()
     test_validation()

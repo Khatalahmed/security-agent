@@ -544,6 +544,20 @@ Audit only what changed, so the tool is practical as a PR/CI gate (fast, cheap o
 - CLI `audit --diff [REF]` (`--diff` alone = uncommitted changes; `--diff main` = vs a ref). Early-exits "nothing to do" with no model call when the changed set is empty; applies to the per-file/skill runners (the whole-repo taint engine is unaffected by design).
 - **Verified:** unit tests for `restrict` + `changed_files` (modified/untracked/clean/non-git); CLI smoke test on a temp git repo — clean tree → 0 changed (no model call), untracked file → detected. Tests **178/178** (includes improvements landed in parallel: case-insensitive enum normalization, hosted base_url hardening, SARIF rule-level security-severity, planner skip-dir fix).
 
+## 10m. Phase 15 — harder evaluation corpus (built 2026-10-06)
+Directly answers the §9f/§10c open question: the earlier benchmarks showed broad == focused *only on easy, single-file, blatant bugs*, so the value of focused skills / taint / RAG was **unmeasured on hard cases**. This builds the instrument to settle it — a corpus specifically engineered to defeat a naive per-file reader.
+
+`evaluation/fixtures_hard2/` — **10 fixtures, 5 vulnerable + 5 look-alike safe twins**, over command_injection / sqli / ssrf / path_traversal / deserialization. Three hardness classes, all absent from the earlier corpora:
+- **Cross-file benign-looking sink** (cmdi/ssrf/deser): the sink lives in a helper that reads as harmless plumbing in isolation, so per-file analysis *should* miss it and the AST taint engine *should* catch it — the one gap per-file analysis structurally cannot close.
+- **Second-order** (sqli): input stored via a safe parameterized write, then read back and concatenated into SQL in a **different** handler (source and sink far apart).
+- **Check-before-decode ordering bug** (path traversal): a real `..` guard that runs on the still-encoded value, bypassed by `%2e%2e%2f` after `unquote()`.
+
+Each vulnerable fixture has a **structurally identical safe twin** (same shape, correctly defended: `shell=False` argv, bound param, host allowlist + no redirects, decode-then-basename-then-anchor, `json.loads`) so **false positives are measurable, not hypothetical**. Ground truth in `evaluation/expected/expected_hard2.json`; run via the harness's `--fixtures-dir`/`--expected` flags (no harness code changed) and the taint engine via `audit --skills taint` per fixture.
+
+**Design choice — no baked-in `--mock` number.** The harness `MockProvider` is keyed to the original `fixtures/` substrings, so it is not a meaningful oracle here (it under-detects and misfires on the safe twins); real numbers are model/host-dependent and belong to a live run, per "measure, don't assume." The **model-free guarantee** that the taint graph proposes exactly the right cross-file chain for each cross-file fixture (and that the safe twin proposes the *same* chain, so only the model's judgment separates them) is locked in `tests/test_spine.py::test_hard2_corpus`.
+
+**Verified:** all 16 fixture files parse; ground truth is 1:1 with the fixture dirs; the deterministic call-graph finds correct cross-file chains for all three cross-file vulnerable fixtures and still raises the chain on the safe SSRF twin. Tests **185/185** (178 + 7). The live detection/precision A/B against a backend is the next measurement this corpus exists to enable.
+
 ## 9c. Target architecture v2 (layered) — adopt *after* the Phase 3 experiment
 
 The v1 "~20 components" list is correct but flat. For a *standard* platform, organize it as **8 layers**. This is the version to build toward once the feasibility experiment passes.
